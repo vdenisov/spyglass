@@ -1,0 +1,12 @@
+spring:
+  application:
+    # Drives the explorer's default title and the x-service-name info extension.
+    name: Spyglass Demo
+
+server:
+  port: 8080
+
+apidocs:
+  demo:
+    # Wires the organization-neutral demo endpoints (DemoEndpointsConfiguration). On for this app.
+    enabled: true

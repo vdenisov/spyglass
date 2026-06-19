@@ -1,0 +1,646 @@
+:root {
+  --bg: #ffffff;
+  --bg-alt: #f6f8fa;
+  --border: #d8dee4;
+  --text: #1f2328;
+  --muted: #656d76;
+  --accent: #0969da;
+  --accent-weak: #ddf4ff;
+  --danger: #cf222e;
+  --get: #1f883d;
+  --post: #0969da;
+  --put: #9a6700;
+  --patch: #8250df;
+  --delete: #cf222e;
+  --ok-bg: #dafbe1;
+  --err-bg: #ffebe9;
+  --warn-bg: #fff8c5;
+  --warn-border: #d4a72c66;
+  --warn-text: #7d5e00;
+  --on-accent: #ffffff;            /* text on the saturated method/response/send badges */
+  --shadow: rgba(31, 35, 40, .12); /* editor tooltip / autocomplete / lint drop shadow */
+  /* Raw-JSON editor syntax tokens (CodeMirror); see JsonEditor.js. The light values are
+     CodeMirror's own defaults (string=#a11, number=#164, bool=#219, null=#708 via keyword),
+     restored so light mode is unchanged; the dark values are brightened, equally
+     differentiated analogues. Keys and punctuation are left to inherit the editor text color. */
+  --cm-string: #a11;
+  --cm-number: #164;
+  --cm-bool: #219;
+  --cm-null: #708;
+  color-scheme: light;             /* native inputs, selects, scrollbars */
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Dark palette. The two rules below MUST stay identical — update them together.
+   Plain CSS can't share one declaration block between an attribute selector and a
+   media query, so the values are duplicated.
+     :root[data-theme="dark"]            -> the user forced dark.
+     OS prefers dark + not forced light  -> "system" follows the OS (also covers the
+                                            no-JS case, where data-theme is absent). */
+:root[data-theme="dark"] {
+  --bg: #0d1117;
+  --bg-alt: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #2f81f7;
+  --accent-weak: rgba(56, 139, 253, .15);
+  --danger: #f85149;
+  --get: #3fb950;
+  --post: #2f81f7;
+  --put: #d29922;
+  --patch: #a371f7;
+  --delete: #f85149;
+  --ok-bg: rgba(46, 160, 67, .15);
+  --err-bg: rgba(248, 81, 73, .12);
+  --warn-bg: rgba(187, 128, 9, .15);
+  --warn-border: #d4a72c66;
+  --warn-text: #d29922;
+  --on-accent: #ffffff;
+  --shadow: rgba(1, 4, 9, .5);
+  --cm-string: #ff7b72;
+  --cm-number: #7ee787;
+  --cm-bool: #79c0ff;
+  --cm-null: #d2a8ff;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --bg: #0d1117;
+    --bg-alt: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #2f81f7;
+    --accent-weak: rgba(56, 139, 253, .15);
+    --danger: #f85149;
+    --get: #3fb950;
+    --post: #2f81f7;
+    --put: #d29922;
+    --patch: #a371f7;
+    --delete: #f85149;
+    --ok-bg: rgba(46, 160, 67, .15);
+    --err-bg: rgba(248, 81, 73, .12);
+    --warn-bg: rgba(187, 128, 9, .15);
+    --warn-border: #d4a72c66;
+    --warn-text: #d29922;
+    --on-accent: #ffffff;
+    --shadow: rgba(1, 4, 9, .5);
+    --cm-string: #ff7b72;
+    --cm-number: #7ee787;
+    --cm-bool: #79c0ff;
+    --cm-null: #d2a8ff;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-size: 14px;
+}
+
+.layout { display: flex; height: 100vh; }
+
+/* --- sidebar --- */
+.sidebar {
+  flex: 0 0 320px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-alt);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.divider {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: var(--border);
+}
+.divider:hover { background: var(--accent); }
+.brand { padding: 14px 16px; font-weight: 600; border-bottom: 1px solid var(--border); }
+.filter {
+  margin: 10px; padding: 7px 9px;
+  border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
+}
+.op-list { overflow-y: auto; overflow-x: auto; padding: 0 8px 16px; flex: 1; }
+.tag-group { margin-top: 12px; min-width: 100%; width: max-content; }
+.tag-name {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); padding: 4px 8px; font-weight: 600;
+}
+.op-link {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  text-align: left; background: none; border: none; cursor: pointer;
+  padding: 5px 8px; border-radius: 6px; color: var(--text); font-size: 13px;
+}
+.op-link:hover { background: var(--accent-weak); }
+.op-link.active { background: var(--accent-weak); outline: 1px solid var(--accent); }
+.op-method {
+  flex: 0 0 52px; font-family: var(--mono); font-size: 11px; font-weight: 700;
+  text-align: center; padding: 2px 0; border-radius: 4px; color: var(--on-accent);
+}
+.op-link .op-path { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+
+.m-get .op-method, .method.m-get { background: var(--get); }
+.m-post .op-method, .method.m-post { background: var(--post); }
+.m-put .op-method, .method.m-put { background: var(--put); }
+.m-patch .op-method, .method.m-patch { background: var(--patch); }
+.m-delete .op-method, .method.m-delete { background: var(--delete); }
+.m-head .op-method, .m-options .op-method { background: var(--muted); }
+
+/* --- main --- */
+.main { flex: 1; overflow-y: auto; }
+/* The topbar reacts to the pane's own width (the sidebar is resizable, so a viewport media query
+   wouldn't track it). Wide: the global actions sit top-right in their own grid column, beside the
+   request controls — no wasted row. Narrow: they stack onto a right-aligned row above the controls,
+   which avoids the collision the side-by-side layout would cause when there isn't room. */
+.topbar-wrap { container: topbar / inline-size; }
+.topbar {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "main actions"; align-items: start; gap: 12px 24px;
+  padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--bg-alt);
+}
+.topbar-main { grid-area: main; display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; min-width: 0; }
+
+/* Global controls (Clear all + the Light/System/Dark theme toggle), pinned to the top-right. */
+.topbar-actions { grid-area: actions; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+
+@container topbar (max-width: 700px) {
+  .topbar { display: flex; flex-direction: column; gap: 12px; }
+}
+.theme-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.theme-toggle button {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--bg); border: none; cursor: pointer;
+  padding: 5px 10px; font-size: 12px; color: var(--muted);
+}
+.theme-toggle button + button { border-left: 1px solid var(--border); }
+.theme-toggle button:hover { color: var(--text); }
+.theme-toggle button.active { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+
+.topbar-left { display: flex; flex-direction: column; gap: 10px; }
+.base-url, .accept-field { display: flex; flex-direction: column; gap: 4px; }
+.base-url span, .accept-field span { font-size: 11px; color: var(--muted); font-weight: 600; }
+.base-url input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; min-width: 320px; font-family: var(--mono); font-size: 12px; }
+.accept-field .combobox, .accept-field .combobox-input { width: 320px; }
+.accept-field .combobox-input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-family: var(--mono); font-size: 12px; }
+input[readonly] { background: var(--bg-alt); color: var(--muted); cursor: default; }
+
+.headers-editor { display: flex; flex-direction: column; gap: 4px; flex: 1 1 360px; min-width: 0; max-width: 600px; }
+.he-title { font-size: 11px; color: var(--muted); font-weight: 600; }
+.he-row { display: flex; gap: 6px; }
+.he-key, .he-val { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-family: var(--mono); font-size: 12px; }
+.he-key { flex: 0 1 180px; min-width: 90px; }
+.he-val { flex: 1 1 200px; min-width: 0; }
+.he-actions { display: flex; gap: 8px; align-items: center; margin-top: 2px; }
+.he-platform { padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; max-width: 230px; }
+
+.status-msg { padding: 40px 20px; color: var(--muted); }
+.status-msg.error { color: var(--danger); }
+
+/* --- operation panel --- */
+.op-panel { padding: 18px 22px 60px; max-width: 920px; }
+.op-header { display: flex; align-items: center; gap: 10px; }
+.method { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--on-accent); padding: 3px 10px; border-radius: 5px; }
+.op-header .op-path { font-family: var(--mono); font-size: 16px; }
+.op-summary { font-weight: 600; margin: 10px 0 2px; }
+.op-desc { color: var(--muted); margin: 2px 0 8px; line-height: 1.45; }
+.op-desc p { margin: 4px 0; }
+
+h4 { margin: 18px 0 8px; font-size: 13px; }
+
+/* --- operation tabs --- */
+.op-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 14px 0 4px; }
+.op-tabs button {
+  background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer;
+  padding: 8px 14px; font-size: 13px; color: var(--muted); margin-bottom: -1px;
+}
+.op-tabs button:hover { color: var(--text); }
+.op-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* --- schema documentation --- */
+.schema-doc .schema-toggle { width: max-content; margin: 12px 0; }
+.schema-block { margin: 6px 0 16px; }
+.resp-line { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.resp-code {
+  font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--on-accent);
+  padding: 2px 8px; border-radius: 5px;
+}
+.resp-code.ok { background: var(--get); }
+.resp-code.err { background: var(--delete); }
+.resp-text { color: var(--muted); font-size: 13px; }
+.example-json {
+  margin: 0; padding: 12px; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 6px;
+  font-family: var(--mono); font-size: 12px; overflow-x: auto; max-height: 460px;
+}
+
+.stree { font-size: 13px; }
+.stree-row { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; flex-wrap: wrap; }
+.stree-name { font-family: var(--mono); font-size: 12px; }
+.stree-type { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+.stree-req { font-size: 11px; color: var(--danger); }
+.stree-constraint { font-size: 11px; color: var(--muted); }
+.stree-desc { color: var(--muted); font-size: 12px; }
+.stree-rootdesc { color: var(--muted); font-size: 12px; margin: 4px 0 12px; line-height: 1.45; }
+.stree-rootdesc p { margin: 4px 0; }
+.stree-children { margin-left: 16px; border-left: 1px solid var(--border); padding-left: 12px; }
+.stree-children.root { margin-left: 0; border-left: none; padding-left: 0; }
+
+.stree-variants { margin-left: 16px; border-left: 1px solid var(--border); padding-left: 12px; }
+.stree-variants.root { margin-left: 0; border-left: none; padding-left: 0; }
+.stree-variant { margin: 6px 0; }
+.stree-variant-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+
+.param-group { margin-bottom: 10px; }
+
+/* --- fields --- */
+.field { margin: 4px 0; }
+.field-row { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
+.field-label { flex: 0 0 200px; font-family: var(--mono); font-size: 12px; word-break: break-word; }
+.req { color: var(--danger); margin-left: 2px; }
+.type-tag {
+  font-size: 10px; color: var(--muted); font-weight: 600;
+  background: var(--border); border-radius: 4px; padding: 1px 6px;
+  text-transform: uppercase; letter-spacing: .03em; cursor: help;
+}
+
+/* themed hover/focus tooltip (see js/tooltip.js, v-tip directive) */
+.app-tooltip {
+  position: fixed; z-index: 1000; max-width: 280px;
+  background: var(--bg-alt); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 9px; font-size: 12px; line-height: 1.45;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
+  opacity: 0; transform: translateY(2px); pointer-events: none;
+  transition: opacity .1s ease, transform .1s ease;
+  white-space: normal; overflow-wrap: anywhere;
+}
+.app-tooltip.visible { opacity: 1; transform: none; }
+.control { display: flex; align-items: center; gap: 8px; flex: 1; }
+.control .combobox-input, .control select {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; min-width: 240px;
+}
+.control .combobox-input:disabled { background: var(--bg-alt); color: var(--muted); }
+.control input.include { min-width: 0; }
+
+.object-body.nested {
+  border-left: 2px solid var(--border); padding-left: 14px; margin: 4px 0 8px;
+}
+.object-body.inactive { opacity: .5; pointer-events: none; }
+
+/* oneOf/anyOf variant selector + selected branch (form) */
+.variant-body.nested {
+  border-left: 2px solid var(--border); padding-left: 14px; margin: 4px 0 8px;
+}
+.variant-body.inactive { opacity: .5; pointer-events: none; }
+.variant-select { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+.variant-select-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.variant-note { color: var(--muted); font-size: 11px; margin: -2px 0 8px; line-height: 1.45; }
+.field-label input.include { margin-right: 5px; vertical-align: middle; }
+.hint { color: var(--muted); font-size: 12px; margin: 4px 0; }
+.field-desc { color: var(--muted); font-size: 12px; margin: 2px 0 8px; line-height: 1.45; }
+.field-desc p { margin: 4px 0; }
+.constraint { font-size: 11px; color: var(--muted); cursor: default; word-break: break-word; }
+
+/* inline markdown */
+.field-desc code, .stree-desc code, .stree-rootdesc code, .resp-text code, .op-desc code {
+  font-family: var(--mono); font-size: .92em; color: var(--text);
+}
+.field-desc a, .stree-desc a, .stree-rootdesc a, .op-desc a { color: var(--accent); }
+
+.array-body {
+  background: var(--bg-alt); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: 6px; padding: 10px 12px; margin: 4px 0 10px;
+}
+.array-item {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; margin: 6px 0;
+}
+.array-item:first-child { margin-top: 0; }
+.array-item-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.array-index { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+.array-text {
+  width: 100%; font-family: var(--mono); font-size: 13px; padding: 8px;
+  border: 1px solid var(--border); border-radius: 6px; resize: vertical;
+}
+.array-param { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.array-param textarea {
+  width: 100%; font-family: var(--mono); font-size: 13px; padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: 6px; resize: vertical;
+}
+
+.map-body {
+  background: var(--bg-alt); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: 6px; padding: 10px 12px; margin: 4px 0 10px;
+}
+.map-entry { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.map-key {
+  flex: 0 0 240px; width: 240px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+  font-family: var(--mono); font-size: 13px;
+}
+.map-value { flex: 1 1 auto; min-width: 0; }
+.map-value .field-row { margin: 0; }
+.map-value .control input, .map-value .control select { width: 100%; min-width: 0; }
+.map-value .combobox { width: 100%; }
+
+.unsupported {
+  background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text);
+  padding: 8px 10px; border-radius: 6px; font-size: 13px; margin: 6px 0;
+}
+
+/* --- body section --- */
+.body-section { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 8px; }
+/* No params above it (operation has no path/query/header params): the op-tabs border already
+   separates it, so drop the redundant second divider. */
+.body-section:first-child { border-top: none; padding-top: 0; }
+.body-head { display: flex; align-items: center; gap: 10px; }
+.body-head h4 { margin: 0; margin-right: auto; }
+.body-tabs button {
+  border: 1px solid var(--border); background: var(--bg); padding: 5px 12px; cursor: pointer;
+  font-size: 12px; color: var(--text);
+}
+.body-tabs button:first-child { border-radius: 6px 0 0 6px; }
+.body-tabs button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+.body-tabs button.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.body-tabs button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* request-body media-type selector + non-JSON body controls */
+.media-select {
+  font-size: 12px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font-family: var(--mono);
+}
+.body-encoding-note { margin: 6px 0; }
+
+/* spec-provided example cards (Schema → Examples tab) */
+.example-card { margin: 0 0 12px; }
+.example-card:last-child { margin-bottom: 0; }
+.example-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.example-name { font-weight: 600; font-size: 13px; }
+.example-summary { font-size: 12px; color: var(--muted); }
+/* The flash sits to the LEFT of the right-anchored button so the button never shifts when it toggles. */
+.example-apply-cluster { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+.example-desc { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+.example-ext { display: inline-block; font-family: var(--mono); font-size: 12px; word-break: break-all; }
+.example-group-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.example-applied { color: var(--get); font-size: 12px; }
+/* Static JSON highlighting for example cards — reuses the Raw editor's token palette (keys inherit). */
+.example-json .tok-str { color: var(--cm-string); }
+.example-json .tok-num { color: var(--cm-number); }
+.example-json .tok-bool { color: var(--cm-bool); }
+.example-json .tok-null { color: var(--cm-null); }
+/* The native file input is visually hidden (its un-stylable "no file chosen" text is replaced by the
+   file list below); a label-wrapped custom button triggers it. */
+.file-picker { display: inline-flex; }
+.file-picker .file-input {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); border: 0;
+}
+.file-btn {
+  display: inline-block; border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  padding: 5px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
+}
+.file-picker:hover .file-btn { border-color: var(--accent); }
+.file-picker:focus-within .file-btn { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Sized to its widest row so the remove ✕ trails the longest filename rather than the panel edge. */
+.file-list { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 3px; width: max-content; max-width: 100%; }
+.file-list li { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.file-list .file-name { word-break: break-all; }
+.file-list .file-size { color: var(--muted); }
+.file-list .btn-mini { margin-left: auto; }
+.raw-other {
+  width: 100%; box-sizing: border-box; min-height: 140px; resize: vertical;
+  font-family: var(--mono); font-size: 12px; line-height: 1.5; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text);
+}
+
+.json-editor { margin-bottom: 6px; }
+.json-editor .cm-editor { width: 100%; }
+
+/* Editor tooltips: schema hover docs, autocomplete info and lint diagnostics. The
+   codemirror-json-schema package ships no CSS, so style its markup here. Two-class
+   selectors keep priority over CodeMirror's runtime-injected base theme. */
+.cm-tooltip.cm-tooltip-hover {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+.cm6-json-schema-hover {
+  max-width: 360px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+}
+/* Divider only when a description precedes the type block (no stray line when type-only). */
+.cm6-json-schema-hover--description + .cm6-json-schema-hover--code-wrapper {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+/* marked wraps blocks in <p>; drop the default 1em margins inside the compact tooltip. */
+.cm6-json-schema-hover p { margin: 0; }
+.cm6-json-schema-hover p + p { margin-top: 6px; }
+/* Type-info line: muted monospace, not a chip. */
+.cm6-json-schema-hover--code { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+/* Autocomplete documentation panel. */
+.cm-tooltip-autocomplete .cm-completionInfo {
+  max-width: 320px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+.cm-completionInfo p { margin: 0; }
+.cm-completionInfo p + p { margin-top: 6px; }
+/* Hide the empty panel for completions whose description is blank. */
+.cm-tooltip-autocomplete .cm-completionInfo:has(> div:empty:only-child) { display: none; }
+
+/* Inline code chips inside prose (descriptions / autocomplete docs / diagnostics). */
+.cm6-json-schema-hover--description code,
+.cm-completionInfo code,
+.cm-diagnostic code {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--bg-alt);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+/* Lint diagnostics (schema + JSON syntax errors). */
+.cm-tooltip.cm-tooltip-lint {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 2px 8px var(--shadow);
+  overflow: hidden;
+}
+.cm-tooltip-lint .cm-diagnostic {
+  padding: 7px 11px;
+  font-size: 12px;
+  line-height: 1.45;
+  border-left-width: 3px;
+}
+.cm-diagnostic p { margin: 0; }
+.cm-diagnostic p + p { margin-top: 6px; }
+
+/* Lint gutter markers. CodeMirror bakes fixed, light-oriented fills into these (e.g. a bright
+   #f87/#f43 error circle) that don't adapt to dark mode and clash with the dark gutter. Repaint
+   each as a masked shape tinted with a palette color, so it follows the theme. Two-class
+   selectors keep priority over CodeMirror's runtime-injected base theme. */
+.cm-lint-marker.cm-lint-marker-error,
+.cm-lint-marker.cm-lint-marker-warning,
+.cm-lint-marker.cm-lint-marker-info {
+  content: normal;                 /* drop the default replaced-content SVG */
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: contain; mask-size: contain;
+}
+.cm-lint-marker.cm-lint-marker-error {
+  background-color: var(--danger);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='16'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='16'/%3E%3C/svg%3E");
+}
+.cm-lint-marker.cm-lint-marker-warning {
+  background-color: var(--warn-text);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 5L38 36L2 36Z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 5L38 36L2 36Z'/%3E%3C/svg%3E");
+}
+.cm-lint-marker.cm-lint-marker-info {
+  background-color: var(--accent);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect x='6' y='6' width='28' height='28' rx='3'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect x='6' y='6' width='28' height='28' rx='3'/%3E%3C/svg%3E");
+}
+.raw-tools { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+.raw-error { color: var(--danger); font-size: 12px; }
+
+/* --- buttons --- */
+.btn-mini {
+  border: 1px solid var(--border); background: var(--bg); cursor: pointer;
+  padding: 4px 9px; border-radius: 6px; font-size: 12px; color: var(--text);
+}
+.btn-mini:hover { background: var(--bg-alt); }
+.btn-mini.add { color: var(--accent); }
+.btn-mini.danger { color: var(--danger); }
+
+.send-bar { display: flex; gap: 10px; align-items: flex-start; margin: 20px 0; }
+/* Send button with its shortcut caption stacked beneath it. */
+.send-cta { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; }
+.kbd-hint {
+  font-size: 11px; color: var(--muted); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 5px; font-family: var(--mono); user-select: none;
+}
+.copied-note { color: var(--get); font-size: 12px; }
+.btn-send {
+  background: var(--get); color: var(--on-accent); border: none; cursor: pointer;
+  padding: 8px 22px; border-radius: 6px; font-size: 14px; font-weight: 600;
+}
+.btn-send:disabled { opacity: .6; cursor: default; }
+
+/* --- response --- */
+.response { margin-top: 14px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.resp-status { display: flex; gap: 16px; padding: 8px 12px; font-family: var(--mono); font-size: 13px; }
+.resp-status.ok { background: var(--ok-bg); }
+.resp-status.err { background: var(--err-bg); }
+.resp-status .dur { color: var(--muted); }
+.response details { border-top: 1px solid var(--border); }
+.response summary { cursor: pointer; padding: 8px 12px; font-size: 12px; color: var(--muted); user-select: none; }
+.response pre {
+  margin: 0; padding: 12px; background: var(--bg-alt); font-family: var(--mono);
+  font-size: 12px; overflow-x: auto; max-height: 460px;
+}
+.resp-status .resp-ct { color: var(--muted); margin-left: auto; }
+.resp-toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 12px; border-top: 1px solid var(--border); }
+.resp-pretty { display: flex; gap: 5px; align-items: center; font-size: 12px; color: var(--muted); margin-right: auto; }
+.resp-image { padding: 8px 12px 12px; }
+/* Fixed thumbnail box so an extreme aspect ratio (e.g. 10000x200) can't blow out the layout. */
+.resp-thumb {
+  display: block; max-width: 240px; max-height: 240px; object-fit: contain;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg-alt);
+}
+.resp-image .hint { margin-top: 6px; }
+.resp-binary { padding: 8px 12px 12px; color: var(--muted); font-size: 12px; }
+.resp-binary code, .resp-image code { font-family: var(--mono); color: var(--text); }
+/* The network-error box sits directly under the status banner; inset it from the panel edges. */
+.response > .unsupported { margin: 10px 12px; }
+.code-viewer { padding: 8px 12px 12px; }
+.code-viewer .cm-editor { width: 100%; }
+.resp-headers-doc { padding: 4px 12px 8px; }
+.resp-headers-title { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 4px 0; }
+.resp-header-row { display: flex; gap: 8px; align-items: baseline; font-size: 12px; padding: 1px 0; }
+
+/* --- non-blocking validation warnings --- */
+.warnings {
+  margin: 14px 0; padding: 8px 12px; border: 1px solid var(--warn-border);
+  background: var(--warn-bg); color: var(--warn-text); border-radius: 6px; font-size: 12px;
+}
+.warnings-head { font-weight: 600; margin-bottom: 4px; }
+.warnings ul { margin: 0; padding-left: 18px; }
+.warnings li { margin: 2px 0; }
+.warnings code { font-family: var(--mono); }
+
+/* --- deprecated / metadata --- */
+.deprecated-banner {
+  margin: 8px 0; padding: 6px 10px; border: 1px solid var(--warn-border);
+  background: var(--warn-bg); color: var(--warn-text); border-radius: 6px; font-size: 13px;
+}
+.op-extdocs { margin: 6px 0; font-size: 13px; }
+.op-extdocs a { color: var(--accent); }
+/* Deprecated op: grey the path (strikethrough makes it unreadable) + a compact "dep" badge. */
+.op-link.deprecated .op-path { color: var(--muted); }
+.sidebar-dep { margin-left: 0; flex: 0 0 auto; }
+/* Keyboard highlight (which row Enter opens) — distinct from .active (the currently-open op). */
+.op-link.kbd-active { background: var(--accent-weak); outline: 1px dashed var(--accent); outline-offset: -1px; }
+.dep-tag {
+  margin-left: 6px; padding: 0 6px; border-radius: 9px; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .03em; background: var(--warn-bg);
+  color: var(--warn-text); border: 1px solid var(--warn-border);
+}
+
+/* --- combobox (themed editable dropdown; replaces the native, unstyleable <datalist>) --- */
+.combobox { position: relative; display: inline-flex; align-items: stretch; }
+.combobox-input { min-width: 0; }
+.combobox-caret {
+  position: absolute; right: 1px; top: 1px; bottom: 1px; width: 26px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); cursor: pointer; user-select: none;
+}
+/* CSS-drawn triangle: the ▾ glyph renders too small regardless of font-size. */
+.combobox-caret::after {
+  content: ''; width: 0; height: 0;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+}
+.combobox-caret.disabled { cursor: default; opacity: .4; }
+/* Reserve room for the caret only when one is shown (no dead space / spinner clash otherwise). */
+.combobox.has-caret > .combobox-input { padding-right: 30px; }
+/* When the caret is shown on a number field, drop the native spinner so they don't share the edge. */
+.combobox.has-caret > .combobox-input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+.combobox.has-caret > .combobox-input[type=number]::-webkit-outer-spin-button,
+.combobox.has-caret > .combobox-input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.combobox-list {
+  position: absolute; top: calc(100% + 2px); left: 0; z-index: 50; min-width: 100%;
+  margin: 0; padding: 4px; list-style: none; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px var(--shadow);
+  max-height: 240px; overflow-y: auto;
+}
+.combobox-list li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; border-radius: 4px; font-family: var(--mono); font-size: 12px;
+  white-space: nowrap; cursor: pointer; color: var(--text);
+}
+.combobox-list li.active { background: var(--accent-weak); }
+.combobox-opt { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.combobox-del { flex: 0 0 auto; color: var(--muted); opacity: 0; cursor: pointer; font-size: 11px; padding: 0 2px; }
+.combobox-list li:hover .combobox-del, .combobox-list li.active .combobox-del { opacity: .55; }
+.combobox-del:hover { color: var(--danger); opacity: 1; }

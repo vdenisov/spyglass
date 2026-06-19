@@ -1,0 +1,22 @@
+# Build output
+target/
+
+# Front-end build tooling
+node_modules/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Markdown is uncommitted by default: the spec/scratch docs may carry private
+# detail and must stay out of this OSS repo. Markdown that
+# must ship is force-added or un-ignored explicitly (e.g. the README rule below).
+*.md
+!README.md

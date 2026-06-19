@@ -1,0 +1,122 @@
+// Bundles entry.mjs into the API explorer's vendored CodeMirror editor and writes a
+// third-party license report. Run via `npm run build` (see build.sh for the Docker wrapper).
+import { build } from 'esbuild'
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const here = dirname(fileURLToPath(import.meta.url))
+const vendorDir = join(here, '..', 'src', 'main', 'resources', 'META-INF', 'resources', 'apidocs', 'vendor')
+const outfile = join(vendorDir, 'codemirror.bundle.js')
+
+// codemirror-json-schema's tooltip renderer (dist/utils/markdown.js) statically imports
+// shiki + markdown-it for syntax-highlighted markdown tooltips the explorer doesn't need.
+// Redirect that one internal import to a stub backed by `marked` (already vendored by the
+// explorer), dropping the shiki engine and ~30 transitive packages from the bundle. Breaks
+// loudly (build error) if the upstream module path changes on a version bump — see README.
+const stubShikiMarkdown = {
+  name: 'stub-cmjs-markdown',
+  setup(b) {
+    const stub = join(here, 'shims', 'markdown-marked.mjs')
+    b.onResolve({ filter: /utils\/markdown$/ }, (args) =>
+      args.importer.includes('codemirror-json-schema') ? { path: stub } : null)
+  }
+}
+
+// codemirror-json-schema renders markdown for hover and property-name autocomplete docs, but
+// passes enum/const VALUE completion descriptions as a raw string, which CodeMirror shows as
+// plain text (literal markdown). Rewrite those two sites to the same renderMarkdown path, with a
+// null-guard so blank descriptions produce no tooltip. Asserts the exact occurrence count and
+// fails the build if the upstream source changes — see frontend/README.md.
+const patchValueCompletionInfo = {
+  name: 'patch-cmjs-value-info',
+  setup(b) {
+    const FIND = '{ info: schema.description }'
+    const REPLACE = '{ info: schema.description ? () => el("div", { inner: renderMarkdown(schema.description) }) : void 0 }'
+    const EXPECTED = 2
+    b.onLoad({ filter: /codemirror-json-schema[\\/]dist[\\/]features[\\/]completion\.js$/ }, (args) => {
+      const src = readFileSync(args.path, 'utf8')
+      const count = src.split(FIND).length - 1
+      if (count !== EXPECTED) {
+        throw new Error(`patch-cmjs-value-info: expected ${EXPECTED} occurrences of ${JSON.stringify(FIND)} ` +
+          `in completion.js, found ${count}. codemirror-json-schema source changed — re-check this patch.`)
+      }
+      return { contents: src.split(FIND).join(REPLACE), loader: 'js' }
+    })
+  }
+}
+
+// --- bundle ----------------------------------------------------------------
+const result = await build({
+  entryPoints: [join(here, 'entry.mjs')],
+  bundle: true,
+  format: 'esm',
+  target: 'es2020',
+  minify: true,
+  plugins: [stubShikiMarkdown, patchValueCompletionInfo],
+  // marked is provided at runtime by the explorer's importmap; don't inline a second copy.
+  external: ['marked'],
+  // Keep upstream license banners in the served file; THIRD-PARTY-NOTICES.txt holds the full set.
+  legalComments: 'eof',
+  metafile: true,
+  outfile,
+  logLevel: 'info'
+})
+console.log('Bundle written:', outfile)
+
+// --- third-party license report (only packages actually in the bundle) -----
+// Drive this off esbuild's metafile, not the install tree, so tree-shaken modules
+// (e.g. the unused YAML/JSON5 code paths) aren't falsely attributed.
+const NM = 'node_modules/'
+function pkgRoot(input) {
+  const idx = input.lastIndexOf(NM)
+  if (idx === -1) return null
+  const parts = input.slice(idx + NM.length).split('/')
+  const name = parts[0].startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0]
+  return { name, dir: join(here, input.slice(0, idx + NM.length), name) }
+}
+
+// SPDX labels for packages whose package.json omits a `license` field but ship a
+// LICENSE file we have read and identified. The full license text is still emitted
+// in the report body below; this only corrects the one-line summary label.
+const LICENSE_OVERRIDES = {
+  // package.json has `license: null`; LICENSE file is verbatim MIT text
+  // ((c) 2013 Odysseas Tsatalos and oDesk Corporation).
+  'valid-url@1.0.9': 'MIT'
+}
+
+const LICENSE_FILE = /^(licen[sc]e|copying|notice)/i
+const pkgs = new Map()
+for (const input of Object.keys(result.metafile.inputs)) {
+  const root = pkgRoot(input)
+  if (!root) continue
+  const pj = join(root.dir, 'package.json')
+  if (!existsSync(pj)) continue
+  const meta = JSON.parse(readFileSync(pj, 'utf8'))
+  if (!meta.name) continue
+  const key = `${meta.name}@${meta.version}`
+  if (pkgs.has(key)) continue
+  const license = LICENSE_OVERRIDES[key] || (typeof meta.license === 'string'
+    ? meta.license
+    : (meta.license && meta.license.type) || (Array.isArray(meta.licenses) && meta.licenses.map(l => l.type).join(' OR ')) || 'UNKNOWN')
+  let text = ''
+  for (const f of readdirSync(root.dir)) {
+    if (LICENSE_FILE.test(f)) { text = readFileSync(join(root.dir, f), 'utf8'); break }
+  }
+  pkgs.set(key, { license, text })
+}
+
+const out = ['Third-party licenses bundled into codemirror.bundle.js',
+  'Generated by build.mjs from esbuild\'s metafile (only modules actually bundled). Do not edit by hand.',
+  `Packages: ${pkgs.size}`, '']
+const summary = []
+for (const [key, v] of [...pkgs].sort((a, b) => a[0].localeCompare(b[0]))) {
+  summary.push(`  ${key}  —  ${v.license}`)
+}
+out.push('SUMMARY', ...summary, '')
+for (const [key, v] of [...pkgs].sort((a, b) => a[0].localeCompare(b[0]))) {
+  out.push('='.repeat(80), `${key}  (${v.license})`, '='.repeat(80),
+    v.text ? v.text.trim() : '(no license text file shipped in the package; see SPDX id above)', '')
+}
+writeFileSync(join(here, 'THIRD-PARTY-NOTICES.txt'), out.join('\n'))
+console.log(`License report written: THIRD-PARTY-NOTICES.txt (${pkgs.size} packages)`)

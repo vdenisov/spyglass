@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.plukh.spyglass</groupId>
+        <artifactId>spyglass-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>spyglass-spring-core</artifactId>
+
+    <name>Spyglass Spring Core</name>
+    <description>
+        Stack-neutral Spring wiring shared by the servlet and reactive adapters: the apidocs.*
+        configuration properties, the additive springdoc OpenApiCustomizer (security scheme + info
+        x-* extensions + default title), and the core configuration that registers them. Compiles
+        against the springdoc-common API so it is usable from both web stacks and across springdoc
+        2.x / 3.x.
+    </description>
+
+    <dependencies>
+        <!-- Carries the front-end assets; consumers of an adapter get them transitively. -->
+        <dependency>
+            <groupId>org.plukh.spyglass</groupId>
+            <artifactId>spyglass-core</artifactId>
+        </dependency>
+
+        <!--
+            Framework APIs the wiring compiles against. Provided: a consuming Spring Boot web service
+            already supplies them, and keeping them off the transitive graph avoids forcing versions /
+            dependency-convergence conflicts on consumers.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-common</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+        </dependency>
+
+        <!-- Test -->
+        <!-- The provided-scope springdoc-common above is also on the test classpath. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.mockito</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.spockframework</groupId>
+            <artifactId>spock-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy-json</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

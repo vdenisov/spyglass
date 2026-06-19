@@ -1,0 +1,22 @@
+{
+  "name": "apidocs-codemirror-bundle",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Builds the vendored CodeMirror 6 + JSON-schema editor bundle for the API explorer.",
+  "scripts": {
+    "build": "node build.mjs",
+    "audit": "npm audit --omit=dev"
+  },
+  "dependencies": {
+    "@codemirror/lang-json": "6.0.2",
+    "@codemirror/lint": "6.9.7",
+    "@codemirror/state": "6.6.0",
+    "@codemirror/view": "6.43.1",
+    "codemirror": "6.0.2",
+    "codemirror-json-schema": "0.8.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2"
+  }
+}

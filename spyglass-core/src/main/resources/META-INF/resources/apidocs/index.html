@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>API Explorer</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <!--
+    Apply the saved theme preference before the stylesheet paints, to avoid a flash of the
+    wrong theme. data-theme holds the literal choice (light | dark | system); the CSS resolves
+    "system" via prefers-color-scheme. This is the only inline script on the page. It can't import
+    config.js (modules load later), so it mirrors that module's storage-namespace resolution
+    (?ns= query param, then window.SPYGLASS_CONFIG, then the "apidocs" default) inline.
+  -->
+  <script>
+    (function () {
+      var ns = new URLSearchParams(window.location.search).get('ns')
+        || (window.SPYGLASS_CONFIG && window.SPYGLASS_CONFIG.storageNamespace)
+        || 'apidocs';
+      document.documentElement.dataset.theme = localStorage.getItem(ns + '-theme') || 'system';
+    })();
+  </script>
+  <link rel="stylesheet" href="css/styles.css">
+  <!--
+    Content-Security-Policy note: the Raw JSON editor (CodeMirror) injects its styles as inline
+    <style> elements at runtime (via style-mod), and renders trusted spec markdown into tooltips.
+    If a CSP is ever applied to this page, style-src must allow 'unsafe-inline' (or supply nonces).
+    All other code is ES modules, but the no-flash theme script above is inline, so script-src
+    would also need a nonce/hash (or 'unsafe-inline') for that one element.
+  -->
+  <script type="importmap">
+    {
+      "imports": {
+        "vue": "./vendor/vue.esm-browser.prod.js",
+        "marked": "./vendor/marked.esm.js",
+        "codemirror-bundle": "./vendor/codemirror.bundle.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

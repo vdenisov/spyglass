@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.plukh.spyglass</groupId>
+        <artifactId>spyglass-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>spyglass-demo</artifactId>
+
+    <name>Spyglass Demo</name>
+    <description>
+        A runnable, organization-neutral Spring Boot showcase for the explorer: a small set of toy
+        endpoints (oneOf/anyOf/discriminator bodies, named examples, multipart/urlencoded forms, binary
+        and image responses, a deprecated operation) that exercise the front-end features a real
+        service's spec may not contain. springdoc generates /v3/api-docs from these endpoints and
+        Spyglass renders them at /apidocs.
+
+        The demo endpoints are exposed as an importable @Configuration (DemoEndpointsConfiguration,
+        gated by apidocs.demo.enabled) so other demos can reuse them. The Spring Boot repackage runs
+        under the "exec" classifier, leaving the plain jar as the default artifact for that reuse.
+    </description>
+
+    <dependencies>
+        <!-- The servlet adapter: brings spyglass-spring-core + spyglass-core assets and SpyglassConfiguration. -->
+        <dependency>
+            <groupId>org.plukh.spyglass</groupId>
+            <artifactId>spyglass-spring-webmvc</artifactId>
+        </dependency>
+
+        <!-- A real (not provided) web stack + springdoc, so the app boots and generates /v3/api-docs. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Test: a small Spock spec guarding the demo's opt-in contract (no Playwright needed here). -->
+        <dependency>
+            <groupId>org.spockframework</groupId>
+            <artifactId>spock-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${springboot.version}</version>
+                <configuration>
+                    <!--
+                        Keep the plain jar (with DemoController + DemoEndpointsConfiguration) as the
+                        default artifact so other demos can depend on it; the runnable fat jar is
+                        attached as spyglass-demo-exec.jar.
+                    -->
+                    <classifier>exec</classifier>
+                    <mainClass>org.plukh.spyglass.demo.SpyglassDemoApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

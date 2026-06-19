@@ -1,0 +1,476 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Fixture Explorer API",
+    "version": "1.0.0",
+    "x-service-name": "fixtureService"
+  },
+  "paths": {
+    "/widgets": {
+      "post": {
+        "tags": ["Widgets"],
+        "summary": "Create a widget",
+        "description": "Creates a **widget**. Exercises every form construct.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateWidget" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The created widget",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Widget" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/widgets/{id}": {
+      "get": {
+        "tags": ["Widgets"],
+        "summary": "Get a widget by id",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "verbose", "in": "query", "required": false, "schema": { "type": "boolean" } },
+          { "name": "fields", "in": "query", "required": false, "schema": { "type": "array", "items": { "type": "string" } } },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "default": 20 } },
+          { "name": "X-Trace", "in": "header", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "A widget",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Widget" }
+              }
+            }
+          },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/things": {
+      "post": {
+        "tags": ["Lookups"],
+        "summary": "Create a thing (unsupported body)",
+        "description": "The request body is a mixed-type scalar, so the form falls back to raw JSON.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "type": ["string", "number"] }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "ok" }
+        }
+      }
+    },
+    "/animals": {
+      "post": {
+        "tags": ["Polymorphic"],
+        "summary": "Create an animal (oneOf + discriminator)",
+        "description": "The body is a discriminated `oneOf`; the form offers a variant selector.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Animal" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "ok" }
+        }
+      }
+    },
+    "/notify": {
+      "post": {
+        "tags": ["Polymorphic"],
+        "summary": "Send a notification (anyOf)",
+        "description": "The body is an `anyOf` without a discriminator.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Notify" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "ok" }
+        }
+      }
+    },
+    "/uploads": {
+      "post": {
+        "tags": ["Bodies"],
+        "summary": "Upload files (multipart)",
+        "description": "A `multipart/form-data` body with a single file, a multi-file array and a text field.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": { "type": "string", "format": "binary", "description": "A single file." },
+                  "files": { "type": "array", "items": { "type": "string", "format": "binary" }, "description": "Several files." },
+                  "note": { "type": "string", "description": "An optional text field." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "ok" }
+        }
+      }
+    },
+    "/form": {
+      "post": {
+        "tags": ["Bodies"],
+        "summary": "Submit a form (urlencoded)",
+        "description": "An `application/x-www-form-urlencoded` body.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "count": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "ok" }
+        }
+      }
+    },
+    "/dual": {
+      "post": {
+        "tags": ["Bodies"],
+        "summary": "Body offered in two encodings",
+        "description": "Declares both JSON and URL-encoded bodies, so the explorer shows a media-type selector.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "type": "object", "properties": { "x": { "type": "string" } } }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": { "type": "object", "properties": { "x": { "type": "string" } } }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "ok" }
+        }
+      }
+    },
+    "/image": {
+      "get": {
+        "tags": ["Bodies"],
+        "summary": "Get an image (binary response)",
+        "description": "Declares only an image/png response, so Accept should preselect image/png (not application/json).",
+        "responses": {
+          "200": {
+            "description": "A PNG image",
+            "content": {
+              "image/png": { "schema": { "type": "string", "format": "binary" } }
+            }
+          }
+        }
+      }
+    },
+    "/examples": {
+      "post": {
+        "tags": ["Bodies"],
+        "summary": "Echo a payload (named examples)",
+        "description": "Showcases spec-provided named `examples` on the request body, a parameter and the response.",
+        "parameters": [
+          {
+            "name": "filter", "in": "query", "required": false, "schema": { "type": "string" },
+            "examples": {
+              "by-name": { "summary": "Match by name", "value": "acme" },
+              "by-id": { "summary": "Match by id", "value": "42" }
+            }
+          },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer" }, "example": 20 }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ExamplePayload" },
+              "examples": {
+                "minimal": { "summary": "Just the required field", "value": { "name": "widget" } },
+                "full": {
+                  "summary": "Every field populated",
+                  "description": "A fully populated payload.",
+                  "value": { "name": "deluxe widget", "count": 7, "tags": ["alpha", "beta"] }
+                },
+                "external": { "summary": "Loaded from a URL", "externalValue": "https://example.invalid/sample-payload.json" }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The echoed payload",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ExamplePayload" },
+                "examples": {
+                  "created": { "summary": "A freshly created payload", "value": { "name": "widget", "count": 1, "tags": ["new"] } },
+                  "archived": { "summary": "An archived payload", "value": { "name": "old widget", "count": 0, "tags": ["archived"] } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/composed": {
+      "post": {
+        "tags": ["Widgets"],
+        "summary": "Create a composed widget",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateComposed" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "ok" }
+        }
+      }
+    },
+    "/events": {
+      "post": {
+        "tags": ["Lookups"],
+        "summary": "Create an event (date handling)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateEvent" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "ok" }
+        }
+      }
+    },
+    "/auth/action-items/refund-request/{refundRequestId}/archive": {
+      "post": {
+        "tags": ["Action items"],
+        "summary": "Archive a refund-request action item",
+        "parameters": [
+          { "name": "refundRequestId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "ok" }
+        }
+      }
+    },
+    "/legacy/{id}": {
+      "get": {
+        "tags": ["Legacy"],
+        "summary": "Deprecated legacy lookup",
+        "deprecated": true,
+        "externalDocs": { "description": "Migration guide", "url": "https://docs.test.local/migrate" },
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "legacyId", "in": "query", "required": false, "deprecated": true, "description": "Deprecated **legacy** id — use id instead.", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "A legacy widget",
+            "headers": {
+              "X-Trace-Id": { "description": "Correlation id for this response.", "schema": { "type": "string" } }
+            },
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/LegacyWidget" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateWidget": {
+        "type": "object",
+        "description": "Creates a **widget**. See the `name` field.",
+        "required": ["name", "priority", "count"],
+        "properties": {
+          "name": { "type": "string", "description": "The widget name." },
+          "description": { "type": "string", "description": "Optional **notes** about the widget." },
+          "active": { "type": "boolean" },
+          "status": { "type": "string", "enum": ["NEW", "ACTIVE", "ARCHIVED"] },
+          "priority": { "type": "string", "enum": ["LOW", "HIGH"] },
+          "count": { "type": "integer", "minimum": 1, "maximum": 10, "multipleOf": 1 },
+          "code": { "type": "string", "minLength": 2, "maxLength": 5, "pattern": "^[A-Z]+$" },
+          "address": { "$ref": "#/components/schemas/Address" },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sku": { "type": "string" },
+                "qty": { "type": "integer" }
+              }
+            }
+          },
+          "labels": { "type": "array", "items": { "type": "string" } },
+          "scores": { "type": "array", "items": { "type": "integer" } },
+          "metadata": { "type": "object", "additionalProperties": { "type": "string" } },
+          "payload": { "oneOf": [{ "type": "string" }, { "type": "integer" }] }
+        }
+      },
+      "Address": {
+        "type": "object",
+        "properties": {
+          "street": { "type": "string" },
+          "city": { "type": "string" }
+        }
+      },
+      "ExamplePayload": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "The payload name.", "example": "widget" },
+          "count": { "type": "integer", "description": "An optional count.", "example": 5 },
+          "tags": { "type": "array", "items": {}, "example": ["a", "b"] }
+        }
+      },
+      "Widget": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "count": { "type": "integer" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "Base": {
+        "type": "object",
+        "required": ["baseId"],
+        "properties": {
+          "baseId": { "type": "string" }
+        }
+      },
+      "Node": {
+        "type": "object",
+        "properties": {
+          "child": { "$ref": "#/components/schemas/Node" }
+        }
+      },
+      "CreateComposed": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Base" },
+          {
+            "type": "object",
+            "properties": {
+              "note": { "type": ["string", "null"] },
+              "kind": { "type": "string", "default": "STD" },
+              "node": { "$ref": "#/components/schemas/Node" }
+            }
+          }
+        ]
+      },
+      "CreateEvent": {
+        "type": "object",
+        "properties": {
+          "at": { "type": "string", "format": "date-time" },
+          "on": { "type": "string", "format": "date" },
+          "eventAt": { "type": "string", "format": "date-time", "example": "2020-01-01T00:00:00.000Z" }
+        }
+      },
+      "LegacyWidget": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "oldField": { "type": "string", "deprecated": true, "description": "Deprecated field — do not use." }
+        }
+      },
+      "Animal": {
+        "type": "object",
+        "properties": {
+          "species": { "type": "string" }
+        },
+        "oneOf": [
+          { "$ref": "#/components/schemas/Dog" },
+          { "$ref": "#/components/schemas/Cat" }
+        ],
+        "discriminator": {
+          "propertyName": "species",
+          "mapping": {
+            "dog": "#/components/schemas/Dog",
+            "cat": "#/components/schemas/Cat"
+          }
+        }
+      },
+      "Dog": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Animal" },
+          {
+            "type": "object",
+            "required": ["bark"],
+            "properties": {
+              "bark": { "type": "string", "description": "The bark sound." }
+            }
+          }
+        ]
+      },
+      "Cat": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Animal" },
+          {
+            "type": "object",
+            "properties": {
+              "lives": { "type": "integer", "minimum": 1, "maximum": 9 }
+            }
+          }
+        ]
+      },
+      "Notify": {
+        "anyOf": [
+          { "$ref": "#/components/schemas/EmailChannel" },
+          { "$ref": "#/components/schemas/SmsChannel" }
+        ]
+      },
+      "EmailChannel": {
+        "type": "object",
+        "required": ["email"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "subject": { "type": "string" }
+        }
+      },
+      "SmsChannel": {
+        "type": "object",
+        "required": ["phone"],
+        "properties": {
+          "phone": { "type": "string" }
+        }
+      }
+    }
+  }
+}
