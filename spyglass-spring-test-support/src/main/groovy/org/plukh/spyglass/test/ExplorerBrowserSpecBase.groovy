@@ -7,8 +7,7 @@ import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.Route
 import groovy.json.JsonSlurper
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.web.context.WebServerApplicationContext
+import org.springframework.beans.factory.annotation.Value
 import spock.lang.Shared
 import spock.lang.Specification
 
@@ -19,12 +18,12 @@ import java.util.function.Consumer
  * Chromium against the explorer via Playwright; the browser is created once per spec class, with a fresh
  * context/page per feature method.
  *
- * <p>This base is <strong>stack-neutral</strong>: it carries no {@code @SpringBootTest} and references no
- * test application, so each concrete subclass supplies its own boot context (servlet or reactive) and the
- * OpenAPI fixture to drive. The subclass only needs to be annotated
- * {@code @SpringBootTest(classes = [SomeTestApp], webEnvironment = RANDOM_PORT, …)}; this base reads the
- * random port from the injected {@link WebServerApplicationContext}, which resolves for both the servlet
- * and reactive contexts.
+ * <p>This base is <strong>stack-neutral</strong> and <strong>Boot-version-neutral</strong>: it carries no
+ * {@code @SpringBootTest} and references no test application, so each concrete subclass supplies its own
+ * boot context (servlet or reactive) and the OpenAPI fixture to drive. The subclass only needs to be
+ * annotated {@code @SpringBootTest(classes = [SomeTestApp], webEnvironment = RANDOM_PORT, …)}; this base
+ * reads the random port from the {@code local.server.port} property (set by the test framework on every
+ * Spring Boot version), rather than a Boot-version-specific {@code WebServerApplicationContext} type.
  *
  * <p>The helpers below assert the explorer's own behaviour (navigation, schema-driven form generation,
  * request building, response rendering). The outbound try-it-out request the explorer would make is
@@ -32,8 +31,8 @@ import java.util.function.Consumer
  */
 abstract class ExplorerBrowserSpecBase extends Specification {
 
-    @Autowired
-    WebServerApplicationContext server
+    @Value('${local.server.port}')
+    int port
 
     @Shared
     Playwright playwright
@@ -58,7 +57,7 @@ abstract class ExplorerBrowserSpecBase extends Specification {
 
     def setup() {
         context = browser.newContext(new Browser.NewContextOptions()
-                .setBaseURL("http://localhost:${server.webServer.port}")
+                .setBaseURL("http://localhost:${port}")
                 .setAcceptDownloads(true)
                 .setPermissions(['clipboard-read', 'clipboard-write']))
         page = context.newPage()
