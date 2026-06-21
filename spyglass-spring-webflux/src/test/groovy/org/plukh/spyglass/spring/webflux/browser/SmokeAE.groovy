@@ -3,7 +3,7 @@ package org.plukh.spyglass.spring.webflux.browser
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
 
 /**
- * Per-flavor smoke for the reactive (WebFlux) adapter (req §14): proof the explorer loads and executes
+ * Per-flavor smoke for the reactive (WebFlux) adapter: proof the explorer loads and executes
  * over the reactive serving stack. The full front-end behaviour is covered by the servlet module's
  * {@code *AE} suite; this spec asserts only the stack-specific serving path — the {@code RouterFunction}
  * redirects resolve, the static assets serve, the spec loads, and try-it-out builds and sends a request
