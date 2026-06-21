@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.plukh.spyglass</groupId>
+        <artifactId>spyglass-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>spyglass-spring-webflux</artifactId>
+
+    <name>Spyglass Spring WebFlux</name>
+    <description>
+        The reactive (Spring WebFlux) adapter over spyglass-spring-core: the single entry point
+        SpyglassConfiguration and a RouterFunction that redirects the friendly explorer paths (/ and
+        /apidocs) to the static entry point. Static assets are served by Boot's reactive defaults from
+        META-INF/resources. A consumer activates this with @Import(SpyglassConfiguration.class).
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.plukh.spyglass</groupId>
+            <artifactId>spyglass-spring-core</artifactId>
+        </dependency>
+
+        <!--
+            Framework APIs the adapter wires against. Provided: a consuming Spring Boot web service
+            supplies them; keeping them off the transitive graph keeps the consumer's versions winning
+            and the dependency graph light.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webflux-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+            Test: boots a minimal reactive app and drives the explorer with Playwright. The
+            provided-scope framework deps above are also on the test classpath, so they are not
+            re-declared here.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.mockito</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.spockframework</groupId>
+            <artifactId>spock-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.spockframework</groupId>
+            <artifactId>spock-spring</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy-json</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>
