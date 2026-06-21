@@ -27,9 +27,14 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-        <!-- Servlet baseline (Phase 1): Boot 3.5 / springdoc 2.x. -->
-        <springboot.version>3.5.7</springboot.version>
-        <springdoc.version>2.8.9</springdoc.version>
+        <!--
+            Default build leg: Boot 3.5 / springdoc 2.x (latest patches). The Boot 4 / springdoc 3
+            leg of the compatibility matrix is activated by the "boot4" profile, which overrides these
+            two properties (see below). Both are concrete because they import the respective BOMs;
+            everything downstream is BOM-managed.
+        -->
+        <springboot.version>3.5.15</springboot.version>
+        <springdoc.version>2.8.17</springdoc.version>
 
         <!-- Test stack. -->
         <groovy.version>4.0.29</groovy.version>
@@ -46,20 +51,13 @@
 
     <dependencyManagement>
         <dependencies>
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-dependencies</artifactId>
-                <version>${springboot.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.springdoc</groupId>
-                <artifactId>springdoc-openapi-bom</artifactId>
-                <version>${springdoc.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
+            <!--
+                The test-stack BOMs are imported BEFORE spring-boot-dependencies on purpose: Maven's
+                first-import-wins rule then pins our Groovy 4.0.x / Spock line regardless of the build
+                leg. Spring Boot 4.x's BOM manages Groovy 5.x (Spring Framework 7's baseline), which the
+                Groovy-4-built Spock 2.3 cannot run on; pinning ahead of it keeps the test stack stable
+                across both the Boot 3.5 and Boot 4 legs. (Boot does not manage Spock or Playwright.)
+            -->
             <dependency>
                 <groupId>org.apache.groovy</groupId>
                 <artifactId>groovy-bom</artifactId>
@@ -71,6 +69,21 @@
                 <groupId>org.spockframework</groupId>
                 <artifactId>spock-bom</artifactId>
                 <version>${spock.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${springboot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-bom</artifactId>
+                <version>${springdoc.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -204,6 +217,20 @@
     </build>
 
     <profiles>
+        <!--
+            The Boot 4 / springdoc 3 leg of the build-compatibility matrix. It only overrides the two
+            BOM-import versions; every framework dependency is provided-scope and BOM-managed, so
+            flipping these reconfigures the whole reactor with no per-module edits.
+            Enable with: mvn -Pboot4 verify (add -Papidocs-tests for the browser specs).
+        -->
+        <profile>
+            <id>boot4</id>
+            <properties>
+                <springboot.version>4.1.0</springboot.version>
+                <springdoc.version>3.0.3</springdoc.version>
+            </properties>
+        </profile>
+
         <!--
             Runs the explorer browser specs (names ending in "AE", for "API Explorer"), which use
             Playwright. The "*AE" naming keeps them out of the default surefire/failsafe patterns; this

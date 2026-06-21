@@ -2,10 +2,6 @@ package org.plukh.spyglass.spring.webflux.test
 
 import org.springframework.boot.SpringBootConfiguration
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration
-import org.springframework.boot.autoconfigure.data.jdbc.JdbcRepositoriesAutoConfiguration
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
-import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
-import org.springframework.boot.autoconfigure.liquibase.LiquibaseAutoConfiguration
 import org.springframework.context.annotation.Import
 import org.springframework.core.io.ClassPathResource
 import org.springframework.http.MediaType
@@ -21,18 +17,13 @@ import java.nio.charset.StandardCharsets
  * {@code classpath:/META-INF/resources/apidocs}, auto-served by Spring's reactive defaults) and a
  * synthetic OpenAPI spec at the path the explorer fetches ({@code /v3/api-docs}), and nothing else.
  *
- * <p>It deliberately does not load a database or any upstream clients — the JDBC/Liquibase
- * auto-configurations are switched off — so the suite stays fast and exercises only that the explorer
- * loads and executes over the reactive serving stack (reactor-netty). The spec references it explicitly
- * via {@code @SpringBootTest(classes = SpyglassReactiveTestApp)}.
+ * <p>It deliberately loads no database or upstream clients — only {@code spring-boot-starter-webflux}
+ * is on the test classpath, so no persistence auto-configuration activates — keeping the suite fast and
+ * exercising only that the explorer loads and executes over the reactive serving stack (reactor-netty).
+ * The spec references it explicitly via {@code @SpringBootTest(classes = SpyglassReactiveTestApp)}.
  */
 @SpringBootConfiguration
-@EnableAutoConfiguration(exclude = [
-        DataSourceAutoConfiguration,
-        DataSourceTransactionManagerAutoConfiguration,
-        JdbcRepositoriesAutoConfiguration,
-        LiquibaseAutoConfiguration
-])
+@EnableAutoConfiguration
 @Import(SpyglassConfiguration)
 @RestController
 class SpyglassReactiveTestApp {

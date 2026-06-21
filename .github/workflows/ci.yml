@@ -1,0 +1,56 @@
+name: CI
+
+# Verifies the OSS build against both supported Spring Boot / springdoc majors:
+#   - the default leg: Spring Boot 3.5 / springdoc 2.x
+#   - the "boot4" leg: Spring Boot 4.x / springdoc 3.x
+# Each leg compiles every module and runs the unit specs plus the Playwright "*AE" browser specs.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.leg.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        leg:
+          - { name: "Boot 3.5 / springdoc 2", profile: "" }
+          - { name: "Boot 4 / springdoc 3", profile: "-Pboot4" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Compile every module (no tests yet) so the reactor artifacts and the Playwright dependency are
+      # resolved before the browser install and the test run.
+      - name: Build (skip tests)
+        run: mvn -B ${{ matrix.leg.profile }} -DskipTests clean install
+
+      # The "*AE" specs drive a real headless Chromium. Pre-install it (and its OS libraries) via the
+      # bundled Playwright CLI; the Playwright version is parent-managed, so the same browser serves both
+      # legs. Run it from the test-support module, which carries playwright as a compile-scope dependency.
+      - name: Install Playwright browser + OS dependencies
+        run: >
+          mvn -B -pl spyglass-spring-test-support
+          org.codehaus.mojo:exec-maven-plugin:3.5.1:java
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.args="install --with-deps chromium"
+          -Dexec.cleanupDaemonThreads=false
+
+      # Unit specs (surefire) + the "*AE" browser specs (failsafe, via the apidocs-tests profile) in one
+      # invocation — the profile only widens the failsafe includes, surefire still runs the unit specs.
+      - name: Verify (unit + browser specs)
+        run: mvn -B ${{ matrix.leg.profile }} verify -Papidocs-tests
