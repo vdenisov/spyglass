@@ -16,6 +16,7 @@
     <modules>
         <module>spyglass-core</module>
         <module>spyglass-spring-core</module>
+        <module>spyglass-spring-test-support</module>
         <module>spyglass-spring-webmvc</module>
         <module>spyglass-spring-webflux</module>
         <module>spyglass-demo</module>
@@ -100,6 +101,11 @@
             <dependency>
                 <groupId>org.plukh.spyglass</groupId>
                 <artifactId>spyglass-spring-webflux</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.plukh.spyglass</groupId>
+                <artifactId>spyglass-spring-test-support</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
