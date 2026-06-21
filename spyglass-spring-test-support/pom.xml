@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.plukh.spyglass</groupId>
+        <artifactId>spyglass-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>spyglass-spring-test-support</artifactId>
+
+    <name>Spyglass Spring Test Support</name>
+    <description>
+        Shared test harness for the explorer browser specs: a Playwright-driven Spock base
+        (ExplorerBrowserSpecBase) carrying the browser lifecycle and the generic explorer helpers, plus
+        a minimal OpenAPI fixture for per-flavor smoke suites. Stack-neutral — it carries no @SpringBootTest
+        and no test app, so each consuming adapter supplies its own (servlet or reactive) boot context.
+        Consumed at test scope by the adapter modules.
+    </description>
+
+    <dependencies>
+        <!--
+            Compile scope: the harness IS the artifact, so consumers depending on it at test scope get
+            Spock/Playwright/spring-boot-test transitively for their own specs. Versions come from the BOMs
+            imported in the parent (spock-bom, groovy-bom, spring-boot-dependencies) and the parent's
+            dependencyManagement (playwright).
+        -->
+        <dependency>
+            <groupId>org.spockframework</groupId>
+            <artifactId>spock-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy-json</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                The base lives in src/main/groovy. The parent binds gmavenplus to compile *test* Groovy;
+                add a main-source execution so the harness itself is compiled and published.
+            -->
+            <plugin>
+                <groupId>org.codehaus.gmavenplus</groupId>
+                <artifactId>gmavenplus-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>compile-main-groovy</id>
+                        <goals>
+                            <goal>addSources</goal>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

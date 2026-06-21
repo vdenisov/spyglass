@@ -46,10 +46,15 @@
         </dependency>
 
         <!--
-            Test: boots a minimal servlet app and drives the explorer with Playwright. The
-            provided-scope framework deps above are also on the test classpath, so they are not
-            re-declared here.
+            Test: boots a minimal servlet app and drives the explorer with Playwright. The shared
+            spyglass-spring-test-support harness supplies the browser spec base (and transitively Spock /
+            Playwright); the provided-scope framework deps above are also on the test classpath.
         -->
+        <dependency>
+            <groupId>org.plukh.spyglass</groupId>
+            <artifactId>spyglass-spring-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

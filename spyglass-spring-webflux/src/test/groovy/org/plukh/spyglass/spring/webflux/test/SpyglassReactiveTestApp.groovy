@@ -39,7 +39,8 @@ class SpyglassReactiveTestApp {
 
     @GetMapping(value = '/v3/api-docs', produces = MediaType.APPLICATION_JSON_VALUE)
     String spec() {
-        new ClassPathResource('apidocs-test/openapi-fixture.json')
+        // The minimal smoke fixture ships in the shared spyglass-spring-test-support jar.
+        new ClassPathResource('apidocs-test/minimal-fixture.json')
                 .inputStream.getText(StandardCharsets.UTF_8.name())
     }
 }
