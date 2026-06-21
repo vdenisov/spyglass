@@ -1,5 +1,6 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { copyText } from '../clipboard.js'
+import { resolveHeaderLink } from '../extensions.js'
 import { loadJson, saveJson, RESPONSE_PRETTY_KEY } from '../storage.js'
 import { formatBytes } from '../format.js'
 import CodeViewer from './CodeViewer.js'
@@ -90,6 +91,25 @@ export default {
       if (await copyText(displayText.value)) { copied.value = true; setTimeout(() => { copied.value = false }, 1500) }
     }
 
+    // Response headers as rows, with an optional deep link per value resolved by registered
+    // extensions (see extensions.js). resolveHeaderLink reads the reactive resolver registry, so a
+    // resolver registered while extensions load is picked up. Falls back to parsing headersText for
+    // any response shape that predates headersList.
+    const headerRows = computed(() => {
+      const list = props.resp.headersList || (props.resp.headersText || '')
+        .split('\n').filter(Boolean).map((line) => {
+          const i = line.indexOf(': ')
+          return i < 0 ? { name: line, value: '' } : { name: line.slice(0, i), value: line.slice(i + 2) }
+        })
+      return list.map(({ name, value }) => ({ name, value, href: resolveHeaderLink(name, value) }))
+    })
+    const headersCopied = ref(false)
+    const copyHeaders = async () => {
+      if (await copyText(props.resp.headersText || '')) {
+        headersCopied.value = true; setTimeout(() => { headersCopied.value = false }, 1500)
+      }
+    }
+
     const downloadFilename = computed(() =>
       filenameFromDisposition(props.resp.contentDisposition) || (props.name + '.' + extFor(props.resp.contentType)))
 
@@ -106,7 +126,10 @@ export default {
       setTimeout(() => URL.revokeObjectURL(url), 0)
     }
 
-    return { pretty, copied, kind, isText, displayText, sizeText, imageUrl, downloadFilename, copy, download }
+    return {
+      pretty, copied, kind, isText, displayText, sizeText, imageUrl, downloadFilename, copy, download,
+      headerRows, headersCopied, copyHeaders
+    }
   },
   template: `
     <div class="response">
@@ -133,7 +156,16 @@ export default {
         </details>
         <details>
           <summary>Headers</summary>
-          <pre class="resp-headers">{{ resp.headersText }}</pre>
+          <div class="resp-headers">
+            <div class="resp-headers-toolbar">
+              <button type="button" class="btn-mini" @click="copyHeaders">{{ headersCopied ? '✓ Copied' : 'Copy' }}</button>
+            </div>
+            <div v-for="(h, i) in headerRows" :key="i" class="resp-headers-row">
+              <span class="rh-name">{{ h.name }}</span>
+              <a v-if="h.href" class="rh-val rh-link" :href="h.href" target="_blank" rel="noopener">{{ h.value }}</a>
+              <span v-else class="rh-val">{{ h.value }}</span>
+            </div>
+          </div>
         </details>
       </template>
     </div>

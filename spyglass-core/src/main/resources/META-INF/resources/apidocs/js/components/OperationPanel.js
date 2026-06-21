@@ -345,10 +345,13 @@ export default {
         const hdrs = {}
         res.headers.forEach((v, k) => { hdrs[k] = v })
         if (props.operation !== opAtStart) return
+        const headerEntries = Object.entries(hdrs)
         response.value = {
           status: res.status, statusText: res.statusText, ok: res.ok, durationMs: dur,
           contentType: ct, blob, rawBody, contentDisposition: res.headers.get('content-disposition') || '',
-          headersText: Object.entries(hdrs).map(([k, v]) => k + ': ' + v).join('\n')
+          // Structured rows back the per-header rendering (link resolution); headersText backs Copy.
+          headersList: headerEntries.map(([name, value]) => ({ name, value })),
+          headersText: headerEntries.map(([k, v]) => k + ': ' + v).join('\n')
         }
       } catch (e) {
         if (props.operation !== opAtStart) return
@@ -529,8 +532,8 @@ export default {
           <div v-for="r in responseRefs" :key="r.status" class="schema-block">
             <div class="resp-line"><span class="resp-code" :class="statusClass(r.status)">{{ r.status }}</span> <span class="resp-text">{{ r.description }}</span></div>
             <div v-if="r.headers && r.headers.length" class="resp-headers-doc">
-              <div class="resp-headers-title">Headers</div>
-              <div v-for="h in r.headers" :key="h.name" class="resp-header-row">
+              <div class="resp-headers-doc-title">Headers</div>
+              <div v-for="h in r.headers" :key="h.name" class="resp-headers-doc-row">
                 <span class="stree-name">{{ h.name }}</span>
                 <span v-if="h.schema && h.schema.type" class="stree-type">{{ h.schema.type }}</span>
                 <span v-if="h.description" class="stree-desc">{{ h.description }}</span>

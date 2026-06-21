@@ -3,7 +3,7 @@ import { CONFIG, storageKey } from '../config.js'
 import { loadSpec, collectOperations } from '../spec.js'
 import { loadJson, saveJson, clearSaved, HEADERS_KEY, AUTH_TOKEN_KEY, SIDEBAR_WIDTH_KEY, ACCEPT_KEY } from '../storage.js'
 import { getValues, recordValue, removeValue, authKey } from '../history.js'
-import { registry, registerAuthPanel, registerHeaderPresets, loadExtensions } from '../extensions.js'
+import { registry, registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver, loadExtensions } from '../extensions.js'
 import Sidebar from './Sidebar.js'
 import OperationPanel from './OperationPanel.js'
 import ThemeToggle from './ThemeToggle.js'
@@ -120,7 +120,7 @@ export default {
       },
       storage: { key: storageKey, load: loadJson, save: saveJson },
       history: { values: getValues, record: recordValue, remove: removeValue, key: authKey },
-      ui: { registerAuthPanel, registerHeaderPresets }
+      ui: { registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver }
     })
 
     // The URL hash is the source of truth for the current selection: #<METHOD>-<path>.

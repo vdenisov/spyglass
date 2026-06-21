@@ -17,7 +17,11 @@ export const registry = reactive({
   authPanels: [],
   // Header-preset groups [{ group, items: [{ name, label, ph?, hint? }] }] feeding the
   // "+ Add preset header" dropdown.
-  headerPresets: []
+  headerPresets: [],
+  // Resolvers (name, value) => url|null that turn a response header into a deep link. First non-null
+  // wins. An embedding extension registers these to point a header value at any destination — a
+  // trace in a log explorer, a bounded-context page, an admin tool — without the core knowing about it.
+  headerLinkResolvers: []
 })
 
 export function registerAuthPanel(component) {
@@ -26,6 +30,25 @@ export function registerAuthPanel(component) {
 
 export function registerHeaderPresets(groups) {
   if (Array.isArray(groups)) registry.headerPresets.push(...groups)
+}
+
+export function registerHeaderLinkResolver(fn) {
+  if (typeof fn === 'function') registry.headerLinkResolvers.push(fn)
+}
+
+// Returns the first non-null URL a registered resolver produces for this response header, or null
+// when none applies (the value then renders as plain text). A throwing resolver is skipped, so a
+// faulty extension can never break the response view.
+export function resolveHeaderLink(name, value) {
+  for (const resolve of registry.headerLinkResolvers) {
+    try {
+      const url = resolve(name, value)
+      if (url) return url
+    } catch (e) {
+      console.error('[spyglass] header-link resolver failed:', e)
+    }
+  }
+  return null
 }
 
 // Dynamically imports each configured extension module and calls its register(api). A failing
