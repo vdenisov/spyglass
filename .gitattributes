@@ -1,0 +1,15 @@
+# Enforce the project's LF convention in the repository, regardless of a contributor's
+# platform or core.autocrlf setting. Git auto-detects binary content and leaves it alone.
+* text=auto eol=lf
+
+# Be explicit for the front-end and config sources so no editor or tool can reintroduce CRLF.
+*.js   text eol=lf
+*.mjs  text eol=lf
+*.json text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+
+# The vendored CodeMirror bundle is a generated, byte-reproducible artifact: the front-end CI
+# gate rebuilds it and asserts `git diff --exit-code`. Exclude it from normalization so its
+# committed bytes stay identical to the build output (this rule wins over `*.js` above).
+*.bundle.js -text

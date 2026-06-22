@@ -14,6 +14,12 @@ on:
 permissions:
   contents: read
 
+# Supersede in-flight runs for the same ref (e.g. a force-push to an open PR) instead of
+# letting them pile up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: ${{ matrix.leg.name }}
@@ -38,6 +44,17 @@ jobs:
       # resolved before the browser install and the test run.
       - name: Build (skip tests)
         run: mvn -B ${{ matrix.leg.profile }} -DskipTests clean install
+
+      # Cache the downloaded Chromium across runs. The browser revision tracks the Playwright version
+      # (parent-managed in pom.xml), so the pom hash is a safe cache key — a Playwright bump invalidates
+      # it. OS libraries (--with-deps) are reinstalled each run regardless; only the browser is cached.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pom.xml') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
 
       # The "*AE" specs drive a real headless Chromium. Pre-install it (and its OS libraries) via the
       # bundled Playwright CLI; the Playwright version is parent-managed, so the same browser serves both

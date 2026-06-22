@@ -1,0 +1,50 @@
+name: Frontend bundle
+
+# Supply-chain + reproducibility gate for the vendored CodeMirror editor bundle. It rebuilds the
+# bundle from sources via the canonical Docker build (the same pinned image as frontend/build.sh)
+# and asserts the committed bundle + THIRD-PARTY-NOTICES.txt are in sync, then audits the editor's
+# production dependencies. Path-filtered: it runs only when the front-end build inputs change.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'spyglass-core/frontend/**'
+      - '.github/workflows/frontend.yml'
+  pull_request:
+    paths:
+      - 'spyglass-core/frontend/**'
+      - '.github/workflows/frontend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    name: Rebuild + audit the CodeMirror bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Rebuild via the canonical Docker build (frontend/build.sh) so the toolchain — and therefore
+      # the output bytes — match what a maintainer produces locally and what is committed.
+      - name: Rebuild the vendored bundle + notices
+        run: bash spyglass-core/frontend/build.sh
+
+      # A clean tree proves the committed codemirror.bundle.js and THIRD-PARTY-NOTICES.txt were
+      # generated from the current sources (a stale or tampered bundle fails here).
+      - name: Assert the committed bundle + notices are in sync with sources
+        run: git diff --exit-code
+
+      # Fail the build on a known vulnerability in the editor's production dependencies. build.sh runs
+      # an informational audit (non-failing) for local convenience; this is the enforcing gate, in the
+      # same pinned image so the lockfile resolves identically.
+      - name: Supply-chain audit (production deps)
+        run: >
+          docker run --rm -v "$PWD/spyglass-core/frontend:/work" -w /work node:20.18.1-alpine
+          sh -c "npm ci --no-audit --no-fund --loglevel=error && npm audit --omit=dev"
