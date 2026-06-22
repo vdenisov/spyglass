@@ -170,6 +170,16 @@ export default {
     // hashchange handler — can be removed on unmount rather than leaking past the component's life.
     const onResize = () => { sidebarWidth.value = clampWidth(sidebarWidth.value) }
 
+    // Keyboard resize for the focusable divider (role=separator): arrows nudge (Shift = coarser),
+    // Home/End jump to the min/max. Mirrors the drag, clamped the same way.
+    const onDividerKey = (e) => {
+      const step = e.shiftKey ? 40 : 16
+      if (e.key === 'ArrowLeft') { e.preventDefault(); sidebarWidth.value = clampWidth(sidebarWidth.value - step) }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); sidebarWidth.value = clampWidth(sidebarWidth.value + step) }
+      else if (e.key === 'Home') { e.preventDefault(); sidebarWidth.value = clampWidth(MIN_SIDEBAR) }
+      else if (e.key === 'End') { e.preventDefault(); sidebarWidth.value = clampWidth(window.innerWidth) }
+    }
+
     const startDrag = () => {
       document.body.style.userSelect = 'none'
       document.body.style.cursor = 'col-resize'
@@ -230,9 +240,10 @@ export default {
     }, { deep: true })
     watch(sidebarWidth, (w) => saveJson(localStorage, SIDEBAR_WIDTH_KEY, w))
 
-    // "Clear all": reset the request inputs — the header rows (cleared; an extension's auth panel adds
-    // its own back via the reset signal), the auth form and Accept — and wipe their persisted copies.
-    // Field history, the sidebar width (layout) and UI preferences (theme, response-pretty) are kept.
+    // "Clear all": reset the shared request inputs — the header rows (cleared) and Accept — wipe their
+    // persisted copies, and bump the reset signal so any extension panel (e.g. an auth generator) clears
+    // its own state too. Field history, the sidebar width (layout) and UI preferences (theme,
+    // response-pretty) are kept.
     const clearAll = () => {
       clearSaved()
       headers.value = []
@@ -245,7 +256,7 @@ export default {
       loading, error, title, operations, selected, baseUrl, headers, sidebarWidth,
       authorizationValue, setAuthorization, authResetSeq,
       accept, acceptOptions, onAcceptInput,
-      addHeader, removeHeader, select, startDrag, clearAll,
+      addHeader, removeHeader, select, startDrag, onDividerKey, minSidebar: MIN_SIDEBAR, clearAll,
       headerPresets: registry.headerPresets, authPanels: registry.authPanels, headerToAdd, addPreset
     }
   },
@@ -253,13 +264,15 @@ export default {
     <div class="layout">
       <Sidebar :operations="operations" :selected-id="selected ? selected.id : ''" :title="title" @select="select"
         :style="{ flex: '0 0 ' + sidebarWidth + 'px', width: sidebarWidth + 'px' }" />
-      <div class="divider" @mousedown.prevent="startDrag" v-tip="'Drag to resize'"></div>
+      <div class="divider" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"
+        :aria-valuenow="Math.round(sidebarWidth)" :aria-valuemin="minSidebar" tabindex="0"
+        @mousedown.prevent="startDrag" @keydown="onDividerKey" v-tip="'Drag, or focus and use ←/→ to resize'"></div>
       <main class="main">
         <div class="topbar-wrap">
         <div class="topbar">
           <div class="topbar-actions">
             <button class="btn-mini danger btn-clear-all" type="button" @click="clearAll"
-              v-tip="'Clears the shared request settings — the global headers, the auth form and Accept. Per-operation inputs (path, query, body), field history, layout and theme are kept.'">Clear all</button>
+              v-tip="'Clears the shared request settings — the global headers, Accept, and any extension panels. Per-operation inputs (path, query, body), field history, layout and theme are kept.'">Clear all</button>
             <ThemeToggle />
           </div>
           <div class="topbar-main">
@@ -277,8 +290,8 @@ export default {
           <div class="headers-editor">
             <span class="he-title">Headers</span>
             <div class="he-row" v-for="(h, i) in headers" :key="h._key">
-              <input class="he-key" v-model="h.key" placeholder="Header name" />
-              <input class="he-val" v-model="h.value" :placeholder="h.ph || 'value'" v-tip="h.hint || ''" />
+              <input class="he-key" v-model="h.key" aria-label="Header name" placeholder="Header name" />
+              <input class="he-val" v-model="h.value" aria-label="Header value" :placeholder="h.ph || 'value'" v-tip="h.hint || ''" />
               <button class="btn-mini danger" type="button" @click="removeHeader(i)" v-tip="'remove'" aria-label="remove header">✕</button>
             </div>
             <div class="he-actions">
@@ -296,10 +309,10 @@ export default {
         </div>
         </div>
 
-        <div v-if="loading" class="status-msg">Loading spec…</div>
-        <div v-else-if="error" class="status-msg error">Failed to load spec: {{ error }}</div>
+        <div v-if="loading" class="status-msg" role="status">Loading spec…</div>
+        <div v-else-if="error" class="status-msg error" role="alert">Failed to load spec: {{ error }}</div>
         <OperationPanel v-else-if="selected" :operation="selected" :base-url="baseUrl" :headers="headers" :accept="accept" />
-        <div v-else class="status-msg">Select an operation from the left.</div>
+        <div v-else class="status-msg" role="status">Select an operation from the left.</div>
       </main>
     </div>
   `

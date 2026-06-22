@@ -24,7 +24,7 @@ export default {
     <div class="params">
       <template v-for="g in groups" :key="g">
         <div v-if="params.some(p => p.in === g)" class="param-group">
-          <h4>{{ labels[g] }}</h4>
+          <h3>{{ labels[g] }}</h3>
           <div v-for="p in inGroup(params, g)" :key="p.name" class="param-field">
           <label class="field-row">
             <span class="field-label">{{ p.name }}<span v-if="p.required" class="req">*</span><span v-if="p.deprecated" class="dep-tag">deprecated</span></span>

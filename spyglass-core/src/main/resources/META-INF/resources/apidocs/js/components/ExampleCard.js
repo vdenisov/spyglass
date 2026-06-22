@@ -48,7 +48,7 @@ export default {
         <span class="example-name">{{ name }}</span>
         <span v-if="summary" class="example-summary">{{ summary }}</span>
         <span v-if="showPrefill" class="example-apply-cluster">
-          <span v-if="applied" class="example-applied">✓ Applied</span>
+          <span v-if="applied" class="example-applied" role="status">✓ Applied</span>
           <button type="button" class="btn-mini example-prefill" @click="apply"
                   v-tip="'Apply this example'">{{ prefillLabel }}</button>
         </span>

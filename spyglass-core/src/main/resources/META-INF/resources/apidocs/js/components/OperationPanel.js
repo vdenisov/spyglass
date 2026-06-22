@@ -481,7 +481,7 @@ export default {
         <span class="method" :class="'m-' + operation.method.toLowerCase()">{{ operation.method }}</span>
         <span class="op-path">{{ operation.path }}</span>
       </header>
-      <p v-if="operation.summary" class="op-summary">{{ operation.summary }}</p>
+      <h2 v-if="operation.summary" class="op-summary">{{ operation.summary }}</h2>
       <div v-if="operation.deprecated" class="deprecated-banner">⚠ This operation is deprecated.</div>
       <div v-if="operation.description" class="op-desc" v-html="mdBlock(operation.description)"></div>
       <p v-if="operation.externalDocs && operation.externalDocs.url" class="op-extdocs">
@@ -500,7 +500,7 @@ export default {
 
         <div v-if="bodyTypes.length" class="body-section">
           <div class="body-head">
-            <h4>Request body</h4>
+            <h3>Request body</h3>
             <select v-if="bodyTypes.length > 1" class="media-select" v-model="mediaType" @change="rebuildBody"
                     v-tip="'Request body content type'">
               <option v-for="t in bodyTypes" :key="t.mediaType" :value="t.mediaType">{{ t.mediaType }}</option>
@@ -547,13 +547,17 @@ export default {
 
         <div class="send-bar">
           <span class="send-cta">
-            <button class="btn-send" type="button" :disabled="sending" v-tip="'Send the request (' + sendHint + ')'" @click="send">{{ sending ? 'Sending…' : 'Send' }}</button>
-            <button v-if="sending" class="btn-mini danger btn-cancel" type="button" v-tip="'Cancel the in-flight request'" @click="cancel">Cancel</button>
+            <!-- One button that morphs: the green Send becomes a red Cancel while a request is in
+                 flight (same size/position, no reflow, focus kept), with progress shown in the caption. -->
+            <button class="btn-send" :class="{ 'btn-cancel': sending }" type="button"
+              v-tip="sending ? 'Cancel the in-flight request' : 'Send the request (' + sendHint + ')'"
+              @click="sending ? cancel() : send()">{{ sending ? 'Cancel' : 'Send' }}</button>
+            <span v-if="sending" class="sending-note" role="status">Sending…</span>
             <span v-else class="kbd-hint" v-tip="'Keyboard shortcut to send the request'">{{ sendHint }}</span>
           </span>
           <button class="btn-mini" type="button" @click="copyCurl">Copy as cURL</button>
           <button class="btn-mini" type="button" @click="copyHttp">Copy as JetBrains .http</button>
-          <span v-if="copied" class="copied-note">✓ Copied</span>
+          <span v-if="copied" class="copied-note" role="status">✓ Copied</span>
         </div>
 
         <ResponseView v-if="response" :resp="response" :name="downloadName" />
@@ -569,11 +573,11 @@ export default {
 
         <template v-if="schemaView === 'schema'">
           <template v-if="requestRef">
-            <h4>Request body</h4>
+            <h3>Request body</h3>
             <div class="schema-block"><SchemaTree :node="requestRef.tree" /></div>
           </template>
 
-          <h4>Responses</h4>
+          <h3>Responses</h3>
           <div v-for="r in responseRefs" :key="r.status" class="schema-block">
             <div class="resp-line"><span class="resp-code" :class="statusClass(r.status)">{{ r.status }}</span> <span class="resp-text">{{ r.description }}</span></div>
             <div v-if="r.headers && r.headers.length" class="resp-headers-doc">
@@ -593,7 +597,7 @@ export default {
           <p v-if="!hasAnyExamples" class="hint">No examples provided in the spec.</p>
 
           <template v-if="paramExampleGroups.length">
-            <h4>Parameters</h4>
+            <h3>Parameters</h3>
             <div v-for="g in paramExampleGroups" :key="g.in + '-' + g.name" class="schema-block">
               <div class="example-group-head"><span class="stree-name">{{ g.name }}</span> <span class="stree-type">{{ g.in }}</span></div>
               <ExampleCard v-for="e in g.examples" :key="e.name" v-bind="e"
@@ -602,7 +606,7 @@ export default {
           </template>
 
           <template v-if="requestExamples.length">
-            <h4>Request body</h4>
+            <h3>Request body</h3>
             <div class="schema-block request-examples">
               <ExampleCard v-for="e in requestExamples" :key="e.name" v-bind="e"
                 :can-prefill="reqCanPrefill" @prefill="prefillRaw" />
@@ -611,7 +615,7 @@ export default {
 
           <template v-for="r in responseRefs" :key="r.status">
             <template v-if="responseExamples(r).length">
-              <h4>Response {{ r.status }}</h4>
+              <h3>Response {{ r.status }}</h3>
               <div class="schema-block response-examples">
                 <ExampleCard v-for="e in responseExamples(r)" :key="e.name" v-bind="e" />
               </div>

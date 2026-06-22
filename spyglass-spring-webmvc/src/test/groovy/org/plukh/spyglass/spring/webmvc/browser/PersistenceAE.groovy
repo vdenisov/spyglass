@@ -4,9 +4,9 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 
 /**
  * Persistence of request state and per-field value history. The Authorization value goes to
- * sessionStorage (short-lived token); other header rows, the auth form and field history go to
- * localStorage. "Clear all" clears the header rows but keeps field history (which is managed
- * per-value via each combobox's ✕).
+ * sessionStorage (short-lived token); the other header rows and field history go to localStorage.
+ * "Clear all" clears the header rows but keeps field history (which is managed per-value via each
+ * combobox's ✕).
  */
 class PersistenceAE extends SpyglassSpecBase {
 

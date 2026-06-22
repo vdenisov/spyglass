@@ -9,6 +9,7 @@
 const SHOW_DELAY_MS = 250
 const VIEWPORT_MARGIN = 8
 const TARGET_GAP = 6
+const TOOLTIP_ID = 'spyglass-tooltip' // links the shown target to the tooltip text via aria-describedby
 
 let tipEl = null
 let activeTarget = null
@@ -19,6 +20,7 @@ function ensureTip() {
   if (tipEl) return tipEl
   tipEl = document.createElement('div')
   tipEl.className = 'app-tooltip'
+  tipEl.id = TOOLTIP_ID
   tipEl.setAttribute('role', 'tooltip')
   document.body.appendChild(tipEl)
   return tipEl
@@ -54,13 +56,17 @@ function position(el, text) {
 
 function show(el, text) {
   bindGlobalListeners()
+  if (activeTarget && activeTarget !== el) activeTarget.removeAttribute('aria-describedby')
   activeTarget = el
   position(el, text)
+  // Point the target at the (now-populated) shared tooltip so a screen reader announces the hint.
+  el.setAttribute('aria-describedby', TOOLTIP_ID)
 }
 
 function hide() {
   clearTimeout(showTimer)
   showTimer = null
+  if (activeTarget) activeTarget.removeAttribute('aria-describedby')
   activeTarget = null
   if (tipEl) tipEl.classList.remove('visible')
 }
@@ -78,8 +84,13 @@ function attach(el) {
   el.__tipLeave = leave
   el.addEventListener('mouseenter', enter)
   el.addEventListener('mouseleave', leave)
-  el.addEventListener('focusin', enter)
-  el.addEventListener('focusout', leave)
+  // `.hover` opts out of the focus trigger (e.g. the sidebar op rows, where it's noisy during arrow
+  // navigation and the opened panel already shows the summary). Those elements carry the hint for
+  // assistive tech in their own accessible name instead.
+  if (!el.__tipHoverOnly) {
+    el.addEventListener('focusin', enter)
+    el.addEventListener('focusout', leave)
+  }
 }
 
 function detach(el) {
@@ -92,6 +103,7 @@ function detach(el) {
 export default {
   mounted(el, binding) {
     el.__tipText = binding.value || ''
+    el.__tipHoverOnly = !!binding.modifiers.hover
     attach(el)
   },
   updated(el, binding) {

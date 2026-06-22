@@ -127,7 +127,7 @@ export default {
   },
   template: `
     <div class="response">
-      <div class="resp-status" :class="statusKind(resp.status)">
+      <div class="resp-status" :class="statusKind(resp.status)" role="status">
         <span class="code">{{ resp.status }} {{ resp.statusText }}</span>
         <span v-if="resp.durationMs != null" class="dur">{{ resp.durationMs }} ms</span>
         <span v-if="resp.contentType" class="resp-ct">{{ resp.contentType }}</span>
@@ -138,7 +138,7 @@ export default {
       <template v-else>
         <div class="resp-toolbar">
           <label v-if="kind === 'json'" class="resp-pretty"><input type="checkbox" v-model="pretty" /> Pretty-print</label>
-          <button v-if="isText" type="button" class="btn-mini" @click="copy">{{ copied ? '✓ Copied' : 'Copy' }}</button>
+          <button v-if="isText" type="button" class="btn-mini" aria-live="polite" @click="copy">{{ copied ? '✓ Copied' : 'Copy' }}</button>
           <button type="button" class="btn-mini" @click="download">Download</button>
         </div>
         <details open>
@@ -154,7 +154,7 @@ export default {
           <summary>Headers</summary>
           <div class="resp-headers">
             <div class="resp-headers-toolbar">
-              <button type="button" class="btn-mini" @click="copyHeaders">{{ headersCopied ? '✓ Copied' : 'Copy' }}</button>
+              <button type="button" class="btn-mini" aria-live="polite" @click="copyHeaders">{{ headersCopied ? '✓ Copied' : 'Copy' }}</button>
             </div>
             <div v-for="(h, i) in headerRows" :key="i" class="resp-headers-row">
               <span class="rh-name">{{ h.name }}</span>
