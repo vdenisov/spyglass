@@ -385,7 +385,10 @@ export default {
     // Ctrl/Cmd+Enter executes the request from anywhere on the operation. A capture-phase listener
     // runs before CodeMirror's default Mod-Enter ("insert blank line"), so it works inside the editor
     // too. Switch to the Try-it-out tab so the response is visible; ignore while a request is in flight.
-    const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+    // Prefer the modern userAgentData.platform (e.g. "macOS"); fall back to the deprecated
+    // navigator.platform, then the UA string, on browsers that don't expose it.
+    const uaPlatform = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || ''
+    const isMac = /Mac|iPhone|iPad/.test(uaPlatform)
     const sendHint = isMac ? '⌘ Enter' : 'Ctrl+Enter'
     const onExecKey = (e) => {
       if (!((e.ctrlKey || e.metaKey) && e.key === 'Enter')) return
