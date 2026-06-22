@@ -19,7 +19,7 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
  * <p>WebFlux has no redirect view-controller (the servlet adapter's {@code addRedirectViewController}),
  * so the redirects are a {@link RouterFunction} bean instead. This composes as an ordinary bean and,
  * unlike a second {@code WebFluxConfigurer}, cannot clobber a host's global CORS configuration — which
- * matters for reactive flavors (e.g. collab) that register a permissive global {@code /**} mapping. The
+ * matters for reactive services that register a permissive global {@code /**} CORS mapping. The
  * explicit {@code GET} routes take precedence over the catch-all static resource handler.
  *
  * <p>Mapping the context root to the explorer effectively replaces Swagger UI as the default API

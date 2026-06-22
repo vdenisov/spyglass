@@ -1,5 +1,5 @@
 // Self-managed recent-value history for input fields, surfaced through the themed <ComboBox>
-// dropdown (Kibana-style). Replaces reliance on the browser's own autofill / native <datalist>,
+// dropdown. Replaces reliance on the browser's own autofill / native <datalist>,
 // which is inconsistent across browsers, unstyleable, can't show the full list on demand, and
 // can't be cleared or asserted in tests.
 //

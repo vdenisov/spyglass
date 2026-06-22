@@ -46,8 +46,8 @@ export default {
     const authResetSeq = ref(0)
 
     // The Accept header (response-format negotiation), applied to every try-it-out request.
-    // application/json yields readable JSON errors; */* (browser default) returns the Thrift-encoded
-    // TError. Defaults to application/json and persists.
+    // application/json yields readable JSON errors; */* accepts any type. Defaults to
+    // application/json and persists.
     const accept = ref(loadJson(localStorage, ACCEPT_KEY, 'application/json'))
     watch(accept, (v) => saveJson(localStorage, ACCEPT_KEY, v))
     // Suggestions: the selected operation's declared response content types, plus common values.
@@ -242,7 +242,7 @@ export default {
             <label class="accept-field">
               <span>Accept</span>
               <ComboBox v-model="accept" :options="acceptOptions" placeholder="(none — browser default */*)"
-                v-tip="'Response format to request. application/json yields readable JSON errors; */* (the browser default) returns the Thrift-encoded TError. Leave blank to send no Accept header.'" />
+                v-tip="'Response format to request. application/json yields readable JSON errors; */* accepts any type. Leave blank to send no Accept header.'" />
             </label>
           </div>
           <div class="headers-editor">
