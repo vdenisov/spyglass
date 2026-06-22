@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { CONFIG, storageKey, isSameOriginExtension } from '../config.js'
 import { loadSpec, collectOperations } from '../spec.js'
 import { loadJson, saveJson, clearSaved, HEADERS_KEY, AUTH_TOKEN_KEY, SIDEBAR_WIDTH_KEY, ACCEPT_KEY } from '../storage.js'
@@ -25,6 +25,19 @@ export default {
     // Requests always go to the origin that served the explorer (same-origin; cross-origin
     // would be blocked by CORS anyway), so the base URL is fixed, not editable.
     const baseUrl = ref(window.location.origin)
+
+    // Per-operation execution state, kept in memory and keyed by op.id. Each slice owns that
+    // operation's in-flight AbortController, its `sending` flag, its latest `response`, and a send
+    // sequence (latest-wins). Holding this here — not inside the reused OperationPanel — is what lets a
+    // request started on one operation keep running, and its response land, while the user views
+    // another; returning to the operation shows its in-flight-or-completed state. Responses are
+    // deliberately never persisted (they can be large or sensitive — see opForm.js).
+    const opStates = reactive({})
+    const execStateFor = (op) => (opStates[op.id] ||= { sending: false, response: null, inflight: null, seq: 0 })
+    // Resolve the current operation's slice off the render path (creating it lazily here, in a watcher,
+    // rather than in the template, avoids mutating reactive state during render).
+    const currentExec = ref(null)
+    watch(selected, (op) => { currentExec.value = op ? execStateFor(op) : null }, { immediate: true })
 
     // Stable per-row key for the header editor. An index key would let Vue reuse an input's DOM/state
     // for the wrong row after a splice removal (a half-typed value jumping to its neighbour); mirrors
@@ -240,11 +253,11 @@ export default {
     }, { deep: true })
     watch(sidebarWidth, (w) => saveJson(localStorage, SIDEBAR_WIDTH_KEY, w))
 
-    // "Clear all": reset the shared request inputs — the header rows (cleared) and Accept — wipe their
-    // persisted copies, and bump the reset signal so any extension panel (e.g. an auth generator) clears
-    // its own state too. Field history, the sidebar width (layout) and UI preferences (theme,
-    // response-pretty) are kept.
-    const clearAll = () => {
+    // "Clear headers": reset the *shared* request inputs — the header rows (cleared) and Accept — wipe
+    // their persisted copies, and bump the reset signal so any extension panel (e.g. an auth generator)
+    // clears its own state too. Per-operation inputs (each operation's own Reset handles those), field
+    // history, the sidebar width (layout) and UI preferences (theme, response-pretty) are kept.
+    const clearHeaders = () => {
       clearSaved()
       headers.value = []
       savedAccept.value = 'application/json'
@@ -256,7 +269,8 @@ export default {
       loading, error, title, operations, selected, baseUrl, headers, sidebarWidth,
       authorizationValue, setAuthorization, authResetSeq,
       accept, acceptOptions, onAcceptInput,
-      addHeader, removeHeader, select, startDrag, onDividerKey, minSidebar: MIN_SIDEBAR, clearAll,
+      addHeader, removeHeader, select, startDrag, onDividerKey, minSidebar: MIN_SIDEBAR, clearHeaders,
+      currentExec,
       headerPresets: registry.headerPresets, authPanels: registry.authPanels, headerToAdd, addPreset
     }
   },
@@ -271,8 +285,8 @@ export default {
         <div class="topbar-wrap">
         <div class="topbar">
           <div class="topbar-actions">
-            <button class="btn-mini danger btn-clear-all" type="button" @click="clearAll"
-              v-tip="'Clears the shared request settings — the global headers, Accept, and any extension panels. Per-operation inputs (path, query, body), field history, layout and theme are kept.'">Clear all</button>
+            <button class="btn-mini danger btn-clear-headers" type="button" @click="clearHeaders"
+              v-tip="'Clears the shared request settings — the global headers, Accept, and any extension panels. Per-operation inputs (path, query, body) are kept — use an operation\\'s Reset to clear it. Field history, layout and theme are kept.'">Clear headers</button>
             <ThemeToggle />
           </div>
           <div class="topbar-main">
@@ -311,7 +325,7 @@ export default {
 
         <div v-if="loading" class="status-msg" role="status">Loading spec…</div>
         <div v-else-if="error" class="status-msg error" role="alert">Failed to load spec: {{ error }}</div>
-        <OperationPanel v-else-if="selected" :operation="selected" :base-url="baseUrl" :headers="headers" :accept="accept" />
+        <OperationPanel v-else-if="selected" :operation="selected" :exec-state="currentExec" :base-url="baseUrl" :headers="headers" :accept="accept" />
         <div v-else class="status-msg" role="status">Select an operation from the left.</div>
       </main>
     </div>

@@ -5,7 +5,7 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 /**
  * Persistence of request state and per-field value history. The Authorization value goes to
  * sessionStorage (short-lived token); the other header rows and field history go to localStorage.
- * "Clear all" clears the header rows but keeps field history (which is managed per-value via each
+ * "Clear headers" clears the header rows but keeps field history (which is managed per-value via each
  * combobox's ✕).
  */
 class PersistenceAE extends SpyglassSpecBase {
@@ -45,7 +45,7 @@ class PersistenceAE extends SpyglassSpecBase {
         page.locator('.he-row').last().locator('.he-val').inputValue() == 'staging'
     }
 
-    def "Clear all clears the header rows but keeps saved history"() {
+    def "Clear headers clears the header rows but keeps saved history"() {
         given:
         open('GET-/widgets/{id}')
         fillAuth('signature abc')
@@ -56,12 +56,12 @@ class PersistenceAE extends SpyglassSpecBase {
         page.waitForFunction("() => (localStorage.getItem('apidocs-field-history') || '').includes('555')")
 
         when:
-        page.locator('.btn-clear-all').click()
+        page.locator('.btn-clear-headers').click()
 
         then: 'the header rows are cleared (the explorer keeps no default Authorization row)'
         page.locator('.he-row').count() == 0
 
-        and: 'field history is preserved (it is managed per-value, not by Clear all)'
+        and: 'field history is preserved (it is managed per-value, not by Clear headers)'
         page.evaluate("() => localStorage.getItem('apidocs-field-history')").toString().contains('555')
     }
 
@@ -98,5 +98,90 @@ class PersistenceAE extends SpyglassSpecBase {
 
         then: 'that value is forgotten'
         page.waitForFunction("() => !(localStorage.getItem('apidocs-field-history') || '').includes('999')") != null
+    }
+
+    // ---- per-operation form persistence (K-2) --------------------------------
+
+    def "per-operation parameters survive a reload"() {
+        given:
+        open('GET-/widgets/{id}')
+        param('id').locator('.control input').fill('42')
+        page.waitForFunction("() => (localStorage.getItem('apidocs-op-form') || '').includes('42')")
+
+        when: 'a genuine reload (open() to the same hash would not reload — same-document nav)'
+        page.reload()
+        page.waitForSelector('.op-panel')
+
+        then: 'the saved value is restored from the per-operation snapshot'
+        param('id').locator('.control input').inputValue() == '42'
+    }
+
+    def "a form-mode request body survives a reload (rebuilt from the saved JSON)"() {
+        given:
+        open('POST-/widgets')
+        fillRequiredWidget('Gizmo', 'HIGH', '5')
+        page.waitForFunction("() => (localStorage.getItem('apidocs-op-form') || '').includes('Gizmo')")
+
+        when:
+        page.reload()
+        page.waitForSelector('.op-panel')
+
+        then: 'the body form fields are re-populated via importValue'
+        textInput('name').inputValue() == 'Gizmo'
+        selectInput('priority').inputValue() == 'HIGH'
+        numberInput('count').inputValue() == '5'
+    }
+
+    def "a Raw JSON body survives a reload verbatim, keeping the Raw tab active"() {
+        given:
+        open('POST-/widgets')
+        clickBodyTab('Raw JSON')
+        rawFill('{"name":"persisted","priority":"HIGH","count":7}')
+        page.waitForFunction("() => (localStorage.getItem('apidocs-op-form') || '').includes('persisted')")
+
+        when:
+        page.reload()
+        page.waitForSelector('.op-panel')
+
+        then: 'the editor reopens on Raw JSON with the same text'
+        page.waitForSelector('.raw-body .cm-editor')
+        rawText().contains('persisted')
+    }
+
+    def "the last response is kept in memory only and is gone after a reload"() {
+        given:
+        open('GET-/widgets/{id}')
+        param('id').locator('.control input').fill('1')
+        captureSend('**/widgets/**')
+        assertThat(page.locator('.response')).isVisible()
+
+        when:
+        page.reload()
+        page.waitForSelector('.op-panel')
+
+        then: 'no response is restored'
+        page.locator('.response').count() == 0
+
+        and: 'and nothing response-shaped was persisted (the form snapshot carries inputs only)'
+        !page.evaluate("() => localStorage.getItem('apidocs-op-form') || ''").toString().contains('"ok":true')
+    }
+
+    def "an operation's Reset clears its inputs, response and saved form"() {
+        given:
+        open('GET-/widgets/{id}')
+        param('id').locator('.control input').fill('99')
+        captureSend('**/widgets/**')
+        page.waitForFunction("() => (localStorage.getItem('apidocs-op-form') || '').includes('99')")
+        assertThat(page.locator('.response')).isVisible()
+
+        when:
+        page.locator('.btn-reset-op').click()
+
+        then: 'the parameter resets to empty and the response is gone'
+        param('id').locator('.control input').inputValue() == ''
+        page.locator('.response').count() == 0
+
+        and: 'and the saved snapshot is removed'
+        page.waitForFunction("() => !(localStorage.getItem('apidocs-op-form') || '').includes('99')") != null
     }
 }

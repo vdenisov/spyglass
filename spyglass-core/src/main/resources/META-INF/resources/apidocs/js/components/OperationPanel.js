@@ -1,7 +1,8 @@
-import { ref, computed, watch, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
 import { makeNode, serializeNode, importValue, requestBodyMediaTypes, serializeMultipart, serializeUrlEncoded, getResponseSchemas, schemaTree, schemaExample, namedExamples, exampleToField, specRoot, collectBodyWarnings, OMIT } from '../spec.js'
 import { mdBlock } from '../markdown.js'
 import { getValues, recordValue, removeValue, paramKey, bodyFieldKey } from '../history.js'
+import { loadForm, saveForm, removeForm } from '../opForm.js'
 import { copyText } from '../clipboard.js'
 import { statusKind } from '../format.js'
 import ParamInputs from './ParamInputs.js'
@@ -43,9 +44,17 @@ export default {
   components: { ParamInputs, ResponseView, JsonEditor },
   props: {
     operation: { type: Object, required: true },
+    // Per-operation execution state, owned by App and keyed by op.id ({ sending, response, inflight,
+    // seq }). The panel is a single reused instance; routing execution through this injected slice —
+    // not local refs — is what keeps a request alive (and its response addressable) across operation
+    // switches.
+    execState: { type: Object, required: true },
     baseUrl: { type: String, default: '' },
     headers: { type: Array, default: () => [] },
-    accept: { type: String, default: '' }
+    accept: { type: String, default: '' },
+    // Optional hook called once a send settles successfully ({ opId, req, response }); the seam a future
+    // request-history store hangs off without touching send().
+    onExecuted: { type: Function, default: null }
   },
   setup(props) {
     const paramState = ref([])
@@ -56,11 +65,18 @@ export default {
     const useRaw = ref(false)
     const rawText = ref('')
     const rawError = ref('')
-    const response = ref(null)
-    const sending = ref(false)
+    // `response` and `sending` live on the per-operation execState slice (so they survive switches);
+    // expose read-only views so the template and shortcut handler are unchanged.
+    const response = computed(() => props.execState.response)
+    const sending = computed(() => props.execState.sending)
     const copied = ref(false)
     const tab = ref('try')
     const schemaView = ref('schema')
+    // True while rebuild() is reseeding the form from a saved snapshot — suppresses the persist watcher
+    // so seeding doesn't immediately re-save (and so a Reset isn't undone). Reset before the watcher's
+    // post-flush run (see nextTick in rebuild). `saveTimer` debounces same-operation persistence.
+    let seeding = false
+    let saveTimer = null
 
     // Documentation (read-only) derived from the spec for the Schema tab.
     // The selected request-body media type and its editor/serialization strategy.
@@ -161,8 +177,34 @@ export default {
       rawText.value = mt.kind === 'json' ? pretty(currentPayload()) : ''
     }
 
-    const rebuild = () => {
+    // Apply a saved form snapshot onto the freshly-rebuilt tree. JSON bodies hydrate via importValue
+    // (the same translation the Form/Raw toggle uses), so nested objects/arrays/maps and oneOf/anyOf
+    // selections restore to whatever fidelity that path supports; a raw-mode body also restores its
+    // verbatim text and mode. Files (multipart) aren't JSON-serializable, so file inputs stay empty.
+    const seedBody = (snap) => {
+      const mt = bodyMt.value
+      if (!mt) return
+      if (mt.kind === 'other') {
+        if (typeof snap.rawText === 'string') rawText.value = snap.rawText
+        return
+      }
+      if (snap.body !== undefined && bodyNode.value) {
+        importValue(bodyNode.value, snap.body)
+        if (mt.kind === 'json') rawText.value = pretty(currentPayload())
+      }
+      if (mt.kind === 'json' && snap.useRaw) {
+        useRaw.value = true
+        if (typeof snap.rawText === 'string') rawText.value = snap.rawText
+      }
+    }
+
+    // Rebuild the panel for the current operation. By default seeds the form from the saved snapshot
+    // (opForm); pass { fresh: true } (the Reset button) to start from schema defaults instead. Execution
+    // state (response/sending) is NOT touched here — it lives on the execState slice and must survive.
+    const rebuild = ({ fresh = false } = {}) => {
       const op = props.operation
+      const snap = fresh ? null : loadForm(op.id)
+      seeding = true
       paramState.value = op.parameters.map(p => {
         const c = controlFor(p.schema)
         const s = p.schema || {}
@@ -176,15 +218,58 @@ export default {
           example: p.example !== undefined ? p.example : s.example, value: def != null ? String(def) : ''
         }
       })
+      if (snap && snap.params) {
+        for (const p of paramState.value) {
+          const k = p.in + ':' + p.name
+          if (k in snap.params) p.value = snap.params[k]
+        }
+      }
       bodyTypes.value = requestBodyMediaTypes(op)
-      mediaType.value = bodyTypes.value.length ? bodyTypes.value[0].mediaType : ''
+      const defaultMt = bodyTypes.value.length ? bodyTypes.value[0].mediaType : ''
+      mediaType.value = (snap && snap.mediaType && bodyTypes.value.some(t => t.mediaType === snap.mediaType)) ? snap.mediaType : defaultMt
       rebuildBody()
-      response.value = null
-      sending.value = false
+      if (snap) seedBody(snap)
       tab.value = 'try'
+      // Release the persist guard only after the watcher's post-mutation flush, so this reseed isn't
+      // itself persisted (which would otherwise undo a Reset).
+      nextTick(() => { seeding = false })
     }
 
-    watch(() => props.operation, rebuild, { immediate: true })
+    // Build the current-form snapshot (params + media type + Form/Raw mode + raw text + body as JSON).
+    const buildSnapshot = () => {
+      const params = {}
+      for (const p of paramState.value) params[p.in + ':' + p.name] = p.value
+      const mt = bodyMt.value
+      const snap = { params, mediaType: mediaType.value, useRaw: useRaw.value, rawText: rawText.value }
+      if (mt && mt.kind === 'json') {
+        if (useRaw.value) { try { snap.body = JSON.parse(rawText.value || '{}') } catch (e) { /* invalid in-progress JSON — keep rawText only */ } }
+        else snap.body = currentPayload()
+      } else if (mt && (mt.kind === 'form' || mt.kind === 'multipart')) {
+        const v = serializeNode(bodyNode.value)
+        snap.body = v === OMIT ? {} : v
+      }
+      return snap
+    }
+    // Persist an operation's current form immediately (used when switching away, before rebuild reseeds
+    // over it, and on unmount).
+    const flushSave = (op) => {
+      if (!op || seeding) return
+      clearTimeout(saveTimer); saveTimer = null
+      saveForm(op.id, buildSnapshot())
+    }
+
+    // On operation switch: persist the OUTGOING operation's form (the refs still hold its values here,
+    // before rebuild), then rebuild (which reseeds for the incoming operation).
+    watch(() => props.operation, (op, prevOp) => { flushSave(prevOp); rebuild() }, { immediate: true })
+
+    // Debounced persistence of same-operation edits, so a reload mid-editing keeps them. Skipped while
+    // seeding; the captured opId guards against a switch landing the save under the wrong operation.
+    watch([paramState, mediaType, useRaw, rawText, bodyNode], () => {
+      if (seeding) return
+      const opId = props.operation.id
+      clearTimeout(saveTimer)
+      saveTimer = setTimeout(() => { if (props.operation.id === opId) saveForm(opId, buildSnapshot()) }, 300)
+    }, { deep: true })
 
     const setRaw = (raw) => {
       if (raw) {
@@ -323,11 +408,10 @@ export default {
     const downloadName = computed(() =>
       (props.operation.method + '-' + props.operation.path).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'response')
 
-    // The in-flight request's AbortController, so the user can cancel a slow send (there is
-    // deliberately no automatic timeout — some endpoints legitimately take minutes). Cleared when the
-    // send settles; aborted on unmount.
-    let inflight = null
-    const cancel = () => { if (inflight) inflight.abort() }
+    // The in-flight request's AbortController lives on the per-operation execState slice, so the user
+    // can cancel a slow send (there is deliberately no automatic timeout — some endpoints legitimately
+    // take minutes) and so a request keeps running, addressable, across operation switches.
+    const cancel = () => { const c = props.execState.inflight; if (c) c.abort() }
 
     const send = async () => {
       rawError.value = ''
@@ -340,12 +424,18 @@ export default {
         return
       }
       recordHistory()
-      // Guard against an operation switch mid-request populating a stale response.
-      const opAtStart = props.operation
+      // Capture the originating operation's slice and id NOW. After any `await` below, `props` reflects
+      // whatever operation is currently selected, so every post-await write must go through these
+      // captures — that is what routes the response back to the operation it was sent from.
+      const es = props.execState
+      const opId = props.operation.id
+      // Re-sending replaces this operation's own prior in-flight call.
+      if (es.inflight) es.inflight.abort()
       const ctrl = new AbortController()
-      inflight = ctrl
-      sending.value = true
-      response.value = null
+      const mySeq = ++es.seq
+      es.inflight = ctrl
+      es.sending = true
+      es.response = null
       try {
         const t0 = performance.now()
         const res = await fetch(req.relUrl, { method: req.method, headers: req.headers, body: req.bodyData || req.bodyStr, signal: ctrl.signal })
@@ -357,9 +447,10 @@ export default {
         const rawBody = isTextLike(ct) ? await blob.text() : null
         const hdrs = {}
         res.headers.forEach((v, k) => { hdrs[k] = v })
-        if (props.operation !== opAtStart) return
+        // Superseded by a newer send for this operation — drop the stale result.
+        if (es.seq !== mySeq) return
         const headerEntries = Object.entries(hdrs)
-        response.value = {
+        es.response = {
           status: res.status, statusText: res.statusText, ok: res.ok, durationMs: dur,
           // The browser follows 3xx transparently (it won't expose the intermediate redirect to JS);
           // these two flags are the only signal that one happened, surfaced as a note in the view.
@@ -369,18 +460,37 @@ export default {
           headersList: headerEntries.map(([name, value]) => ({ name, value })),
           headersText: headerEntries.map(([k, v]) => k + ': ' + v).join('\n')
         }
+        if (props.onExecuted) props.onExecuted({ opId, req, response: es.response })
       } catch (e) {
-        if (props.operation !== opAtStart) return
+        // Drop a superseded call's error/abort (e.g. the one a re-send just aborted) so it can't flash
+        // "Request cancelled" over the newer in-flight; only the current call reports.
+        if (es.seq !== mySeq) return
         // A user-driven cancel surfaces as a DOMException named AbortError — report it as a cancel, not
         // a network failure (the response view renders `cancelled` without the "Network error:" prefix).
-        if (e.name === 'AbortError') response.value = { status: '—', statusText: '', ok: false, cancelled: true }
-        else response.value = { status: '—', statusText: '', ok: false, networkError: e.message }
+        if (e.name === 'AbortError') es.response = { status: '—', statusText: '', ok: false, cancelled: true }
+        else es.response = { status: '—', statusText: '', ok: false, networkError: e.message }
       } finally {
-        if (inflight === ctrl) inflight = null
-        if (props.operation === opAtStart) sending.value = false
+        if (es.inflight === ctrl) es.inflight = null
+        if (es.seq === mySeq) es.sending = false
       }
     }
+
+    // Reset this operation to a clean slate: abort any in-flight request (bumping seq so its aborted
+    // call can't write a stale "cancelled" response), drop its in-memory response, forget its saved
+    // form snapshot, and rebuild the form from schema defaults (no seed).
+    const reset = () => {
+      const es = props.execState
+      if (es.inflight) es.inflight.abort()
+      es.seq++
+      es.inflight = null
+      es.sending = false
+      es.response = null
+      removeForm(props.operation.id)
+      rebuild({ fresh: true })
+    }
+
     onBeforeUnmount(cancel)
+    onBeforeUnmount(() => flushSave(props.operation))
 
     // Ctrl/Cmd+Enter executes the request from anywhere on the operation. A capture-phase listener
     // runs before CodeMirror's default Mod-Enter ("insert blank line"), so it works inside the editor
@@ -475,7 +585,7 @@ export default {
       paramState, bodyTypes, mediaType, bodyMt, curKind, rebuildBody, bodyNode, bodySupported, useRaw, rawText, rawError, response, sending, cancel, copied,
       tab, schemaView, requestRef, responseRefs, statusClass, editorSchema, mdBlock,
       requestExamples, reqCanPrefill, responseExamples, paramExampleGroups, hasAnyExamples, prefillRaw, prefillParam,
-      setRaw, prettyRaw, send, copyCurl, copyHttp, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys
+      setRaw, prettyRaw, send, reset, copyCurl, copyHttp, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys
     }
   },
   template: `
@@ -560,6 +670,8 @@ export default {
           </span>
           <button class="btn-mini" type="button" @click="copyCurl">Copy as cURL</button>
           <button class="btn-mini" type="button" @click="copyHttp">Copy as JetBrains .http</button>
+          <button class="btn-mini danger btn-reset-op" type="button" @click="reset"
+            v-tip="'Reset this operation — clear its inputs, saved form, and last response'">Reset</button>
           <span v-if="copied" class="copied-note" role="status">✓ Copied</span>
         </div>
 
