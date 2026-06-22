@@ -59,16 +59,38 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Test: a small Spock spec guarding the demo's opt-in contract (no Playwright needed here). -->
+        <!-- Test: Spock specs guarding the demo's opt-in contract and that its request bodies actually
+             bind (the latter boots the app on a random port; no Playwright needed here). -->
         <dependency>
             <groupId>org.spockframework</groupId>
             <artifactId>spock-core</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.spockframework</groupId>
+            <artifactId>spock-spring</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.apache.groovy</groupId>
             <artifactId>groovy</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy-json</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.mockito</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 
@@ -84,6 +106,16 @@
                             <artifactId>lombok</artifactId>
                         </path>
                     </annotationProcessorPaths>
+                    <!--
+                        Emit method/constructor parameter names so Jackson can bind the immutable
+                        request-body types through their canonical constructor — version-agnostically
+                        across the Jackson 2 (Boot 3.5) and Jackson 3 (Boot 4) legs. (Spring Boot's own
+                        starter-parent sets this by default; this module uses the Spyglass parent, which
+                        doesn't, so it is set explicitly.)
+                    -->
+                    <compilerArgs combine.children="append">
+                        <arg>-parameters</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
             <plugin>

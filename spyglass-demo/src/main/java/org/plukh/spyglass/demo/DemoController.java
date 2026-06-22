@@ -348,7 +348,6 @@ public class DemoController {
      * body of {@code POST /examples}.
      */
     @Value
-    @Builder
     public static class ExamplePayload {
 
         @Schema(description = "The payload name.", example = "widget")
@@ -392,8 +391,9 @@ public class DemoController {
     /**
      * Demo — the "circle" shape branch.
      */
+    // @Value (not @Builder) — Jackson binds it through the public all-args constructor (see -parameters
+    // in the build); these request-body types are only echoed, never built, so no builder is needed.
     @Value
-    @Builder
     public static class Circle implements Shape {
 
         @Schema(description = "Discriminator value — always \"circle\".")
@@ -407,7 +407,6 @@ public class DemoController {
      * Demo — the "square" shape branch.
      */
     @Value
-    @Builder
     public static class Square implements Shape {
 
         @Schema(description = "Discriminator value — always \"square\".")
@@ -420,12 +419,11 @@ public class DemoController {
     /**
      * Demo — a body with a non-discriminated anyOf field (either text or a number wrapper).
      */
-    @Value
-    @Builder
-    public static class PayloadRequest {
-
-        @Schema(description = "Either a text or a number payload.", anyOf = {TextPayload.class, NumberPayload.class})
-        Object value;
+    // A record (not @Value) — a single-field immutable type, where a record binds properties-based on
+    // both Jackson majors; a one-arg constructor would instead be treated as delegating.
+    public record PayloadRequest(
+            @Schema(description = "Either a text or a number payload.", anyOf = {TextPayload.class, NumberPayload.class})
+            Object value) {
     }
 
     /**
@@ -455,7 +453,6 @@ public class DemoController {
      * a performance probe for form rendering and keyboard navigation on a complex operation.
      */
     @Value
-    @Builder
     public static class WideForm {
 
         String name;
@@ -538,7 +535,6 @@ public class DemoController {
      * Demo — the nested object of {@link WideForm}.
      */
     @Value
-    @Builder
     public static class WideAddress {
 
         String line1;
