@@ -1,5 +1,5 @@
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
-import { CONFIG, storageKey } from '../config.js'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { CONFIG, storageKey, isSameOriginExtension } from '../config.js'
 import { loadSpec, collectOperations } from '../spec.js'
 import { loadJson, saveJson, clearSaved, HEADERS_KEY, AUTH_TOKEN_KEY, SIDEBAR_WIDTH_KEY, ACCEPT_KEY } from '../storage.js'
 import { getValues, recordValue, removeValue, authKey } from '../history.js'
@@ -26,16 +26,24 @@ export default {
     // would be blocked by CORS anyway), so the base URL is fixed, not editable.
     const baseUrl = ref(window.location.origin)
 
-    // Hydrate persisted header rows. Their Authorization value is not stored here (it's a
-    // short-lived token kept in sessionStorage); overlay it back onto the Authorization row.
+    // Stable per-row key for the header editor. An index key would let Vue reuse an input's DOM/state
+    // for the wrong row after a splice removal (a half-typed value jumping to its neighbour); mirrors
+    // spec.js's `_key` rows.
+    let headerSeq = 0
+    const nextHeaderKey = () => ++headerSeq
+    const headerRow = (h) => ({ _key: nextHeaderKey(), key: h.key || '', value: h.value || '', ph: h.ph, hint: h.hint })
+
+    // Hydrate persisted header rows. The explorer doesn't force an Authorization row: a present-but-
+    // empty Authorization is malformed and, on this same-origin explorer, can suppress the cookie/
+    // session auth the user already has, so a row exists only once the user or an extension adds one.
+    // The Authorization value isn't persisted in localStorage (it's a short-lived token in
+    // sessionStorage); overlay it back, recreating the row if a token outlived its persisted row.
     const storedHeaders = loadJson(localStorage, HEADERS_KEY, null)
-    const initialHeaders = Array.isArray(storedHeaders) && storedHeaders.length
-      ? storedHeaders.map(h => ({ key: h.key || '', value: h.value || '', ph: h.ph, hint: h.hint }))
-      : [{ key: 'Authorization', value: '' }]
+    const initialHeaders = Array.isArray(storedHeaders) ? storedHeaders.map(headerRow) : []
     const storedToken = loadJson(sessionStorage, AUTH_TOKEN_KEY, '') || ''
     const authRow = initialHeaders.find(h => (h.key || '').toLowerCase() === 'authorization')
     if (authRow) authRow.value = storedToken
-    else initialHeaders.unshift({ key: 'Authorization', value: storedToken })
+    else if (storedToken) initialHeaders.unshift(headerRow({ key: 'Authorization', value: storedToken }))
     const headers = ref(initialHeaders)
 
     // A stored sidebar width wins over the measured default (applied/clamped in onMounted).
@@ -46,10 +54,14 @@ export default {
     const authResetSeq = ref(0)
 
     // The Accept header (response-format negotiation), applied to every try-it-out request.
-    // application/json yields readable JSON errors; */* accepts any type. Defaults to
-    // application/json and persists.
-    const accept = ref(loadJson(localStorage, ACCEPT_KEY, 'application/json'))
-    watch(accept, (v) => saveJson(localStorage, ACCEPT_KEY, v))
+    // application/json yields readable JSON errors; */* accepts any type. `savedAccept` is the user's
+    // persisted global preference; `accept` is what the current operation actually sends and the
+    // ComboBox shows — it equals the preference unless the operation can't satisfy it (see below).
+    const savedAccept = ref(loadJson(localStorage, ACCEPT_KEY, 'application/json'))
+    const accept = ref(savedAccept.value)
+    // A ComboBox edit is a deliberate user choice: it updates the saved preference (and persists). The
+    // per-operation auto-narrow below writes only `accept`, so it never overwrites the preference.
+    const onAcceptInput = (v) => { accept.value = v; savedAccept.value = v; saveJson(localStorage, ACCEPT_KEY, v) }
     // Suggestions: the selected operation's declared response content types, plus common values.
     const acceptOptions = computed(() => {
       const set = new Set(['application/json', '*/*'])
@@ -72,14 +84,15 @@ export default {
       if (!value || value === '*/*' || !produced.length || produced.includes('*/*') || produced.includes(value)) return true
       return value.includes('json') && produced.some(p => p.includes('json')) // a JSON Accept is met by any JSON-ish type
     }
-    // Preselect a compatible Accept when the chosen operation can't satisfy the current value — e.g. an
-    // image/binary download would 406 with application/json. The user's value is kept whenever the
-    // endpoint can satisfy it (so a global application/json / */* preference still sticks for JSON APIs).
+    // On each operation, start from the saved preference, then narrow only when this operation can't
+    // satisfy it — e.g. an image/binary download would 406 with application/json. This is a
+    // per-operation override (written to `accept`, not `savedAccept`), so a previous operation's
+    // narrowing never sticks and the user's global preference is preserved untouched.
     watch(selected, (op) => {
       const produced = successProduced(op)
-      if (produced.length && !acceptSatisfiable(accept.value, produced)) accept.value = produced[0]
+      accept.value = (produced.length && !acceptSatisfiable(savedAccept.value, produced)) ? produced[0] : savedAccept.value
     })
-    const addHeader = () => headers.value.push({ key: '', value: '' })
+    const addHeader = () => headers.value.push(headerRow({ key: '', value: '' }))
     const removeHeader = (i) => headers.value.splice(i, 1)
 
     // Header presets: an extension may contribute named header groups (see extensions.js); selecting
@@ -88,7 +101,7 @@ export default {
     const addPreset = (name) => {
       for (const group of registry.headerPresets) {
         const def = group.items.find(i => i.name === name)
-        if (def) { headers.value.push({ key: def.name, value: '', ph: def.ph, hint: def.hint }); break }
+        if (def) { headers.value.push(headerRow({ key: def.name, value: '', ph: def.ph, hint: def.hint })); break }
       }
       headerToAdd.value = ''
     }
@@ -102,7 +115,7 @@ export default {
     const setAuthorization = (value) => {
       const row = headers.value.find(h => (h.key || '').toLowerCase() === 'authorization')
       if (row) row.value = value
-      else headers.value.unshift({ key: 'Authorization', value })
+      else headers.value.unshift(headerRow({ key: 'Authorization', value }))
     }
 
     // The seam context handed to each extension's register(api). It exposes the loaded spec (for the
@@ -113,7 +126,7 @@ export default {
       spec,
       config: CONFIG,
       headers: {
-        add: (row) => headers.value.push({ key: row.key || '', value: row.value || '', ph: row.ph, hint: row.hint }),
+        add: (row) => headers.value.push(headerRow(row)),
         authorization: authorizationValue,
         setAuthorization,
         resetSignal: authResetSeq
@@ -153,6 +166,10 @@ export default {
       if (max > 0) sidebarWidth.value = clampWidth(max + 28)
     }
 
+    // Re-clamp the sidebar against the new viewport (the cap is half the width). Named so it — and the
+    // hashchange handler — can be removed on unmount rather than leaking past the component's life.
+    const onResize = () => { sidebarWidth.value = clampWidth(sidebarWidth.value) }
+
     const startDrag = () => {
       document.body.style.userSelect = 'none'
       document.body.style.cursor = 'col-resize'
@@ -172,12 +189,16 @@ export default {
         const spec = await loadSpec(CONFIG.specUrl)
         if (spec.info && spec.info.title) { title.value = spec.info.title; document.title = spec.info.title }
         operations.value = collectOperations()
-        // Front-end extensions: query/global lists (resolved in config.js) win; otherwise the spec may
-        // advertise modules via the x-spyglass-extensions info extension. Each module's register(api)
-        // contributes UI (an auth panel, header presets) through the seam.
+        // Front-end extensions: the operator's query/global list (resolved in config.js) is trusted and
+        // wins. Otherwise the spec may advertise modules via the x-spyglass-extensions info extension —
+        // but a spec is less trusted, so those are limited to same-origin (a cross-origin URL there
+        // could load arbitrary third-party ESM into this origin). The effective list is local; CONFIG
+        // is not mutated. Each module's register(api) contributes UI through the seam.
         const specExtensions = (spec.info && spec.info['x-spyglass-extensions']) || []
-        if (!CONFIG.extensions.length && Array.isArray(specExtensions)) CONFIG.extensions = specExtensions
-        await loadExtensions(buildExtensionApi(spec))
+        const extensions = CONFIG.extensions.length
+          ? CONFIG.extensions
+          : (Array.isArray(specExtensions) ? specExtensions.filter(isSameOriginExtension) : [])
+        await loadExtensions(buildExtensionApi(spec), extensions)
         await nextTick()
         // A persisted width wins; otherwise fall back to the measured (widest-row) default.
         if (storedWidth == null) measureSidebar()
@@ -189,25 +210,33 @@ export default {
         loading.value = false
       }
       window.addEventListener('hashchange', applyHash)
-      window.addEventListener('resize', () => { sidebarWidth.value = clampWidth(sidebarWidth.value) })
+      window.addEventListener('resize', onResize)
+    })
+    onBeforeUnmount(() => {
+      window.removeEventListener('hashchange', applyHash)
+      window.removeEventListener('resize', onResize)
     })
 
     // Persist request state on change. Authorization value → sessionStorage (short-lived token);
     // the remaining header rows → localStorage. Sidebar width → localStorage.
     watch(headers, () => {
-      const rows = headers.value.map(h =>
-        (h.key || '').toLowerCase() === 'authorization' ? { ...h, value: '' } : { ...h })
+      // Persist the wire fields only (not the ephemeral `_key`); blank the Authorization value (its
+      // token lives in sessionStorage, restored on hydrate).
+      const rows = headers.value.map(h => ({
+        key: h.key, value: (h.key || '').toLowerCase() === 'authorization' ? '' : h.value, ph: h.ph, hint: h.hint
+      }))
       saveJson(localStorage, HEADERS_KEY, rows)
       saveJson(sessionStorage, AUTH_TOKEN_KEY, authorizationValue.value)
     }, { deep: true })
     watch(sidebarWidth, (w) => saveJson(localStorage, SIDEBAR_WIDTH_KEY, w))
 
-    // "Clear all": reset the request inputs — the header rows (to a single empty Authorization row,
-    // needed on nearly every request), the auth form and Accept — and wipe their persisted copies.
+    // "Clear all": reset the request inputs — the header rows (cleared; an extension's auth panel adds
+    // its own back via the reset signal), the auth form and Accept — and wipe their persisted copies.
     // Field history, the sidebar width (layout) and UI preferences (theme, response-pretty) are kept.
     const clearAll = () => {
       clearSaved()
-      headers.value = [{ key: 'Authorization', value: '' }]
+      headers.value = []
+      savedAccept.value = 'application/json'
       accept.value = 'application/json'
       authResetSeq.value++
     }
@@ -215,7 +244,7 @@ export default {
     return {
       loading, error, title, operations, selected, baseUrl, headers, sidebarWidth,
       authorizationValue, setAuthorization, authResetSeq,
-      accept, acceptOptions,
+      accept, acceptOptions, onAcceptInput,
       addHeader, removeHeader, select, startDrag, clearAll,
       headerPresets: registry.headerPresets, authPanels: registry.authPanels, headerToAdd, addPreset
     }
@@ -241,13 +270,13 @@ export default {
             </label>
             <label class="accept-field">
               <span>Accept</span>
-              <ComboBox v-model="accept" :options="acceptOptions" placeholder="(none — browser default */*)"
+              <ComboBox :model-value="accept" @update:model-value="onAcceptInput" :options="acceptOptions" placeholder="(none — browser default */*)"
                 v-tip="'Response format to request. application/json yields readable JSON errors; */* accepts any type. Leave blank to send no Accept header.'" />
             </label>
           </div>
           <div class="headers-editor">
             <span class="he-title">Headers</span>
-            <div class="he-row" v-for="(h, i) in headers" :key="i">
+            <div class="he-row" v-for="(h, i) in headers" :key="h._key">
               <input class="he-key" v-model="h.key" placeholder="Header name" />
               <input class="he-val" v-model="h.value" :placeholder="h.ph || 'value'" v-tip="h.hint || ''" />
               <button class="btn-mini danger" type="button" @click="removeHeader(i)" v-tip="'remove'" aria-label="remove header">✕</button>

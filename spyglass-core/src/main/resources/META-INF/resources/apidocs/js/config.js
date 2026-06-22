@@ -27,3 +27,17 @@ export const CONFIG = {
 export function storageKey(suffix) {
   return `${CONFIG.storageNamespace}-${suffix}`
 }
+
+// Whether an extension-module URL is same-origin (a relative path, or an absolute URL whose origin
+// matches the page). The spec's x-spyglass-extensions list is author-supplied and less trusted than
+// the operator's own ?ext=/SPYGLASS_CONFIG: an absolute cross-origin URL there would let a spec pull
+// arbitrary third-party ESM into the explorer's origin. App.js limits spec-supplied modules to
+// same-origin via this check; operator-supplied lists are trusted and may point anywhere.
+export function isSameOriginExtension(url) {
+  if (typeof url !== 'string' || !url) return false
+  try {
+    return new URL(url, window.location.href).origin === window.location.origin
+  } catch (e) {
+    return false
+  }
+}

@@ -598,14 +598,6 @@ export function collectOperations() {
   return ops
 }
 
-// Returns the application/json request-body schema for an operation, or null when absent.
-export function requestBodySchema(operation) {
-  const content = operation.requestBody && operation.requestBody.content
-  if (!content) return null
-  const json = content['application/json'] || content[Object.keys(content)[0]]
-  return json ? { schema: json.schema || {}, required: !!operation.requestBody.required } : null
-}
-
 // Normalizes the OpenAPI named-`examples` map (and the singular `example`) of any holder — a media
 // type object or a Parameter object — into a flat list: [{ name, summary, description, value,
 // externalValue }]. The named map wins; a lone singular `example` becomes a single "Example" entry.

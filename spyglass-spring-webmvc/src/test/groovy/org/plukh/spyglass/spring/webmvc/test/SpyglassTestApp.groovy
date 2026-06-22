@@ -30,4 +30,12 @@ class SpyglassTestApp {
         new ClassPathResource('apidocs-test/openapi-fixture.json')
                 .inputStream.getText(StandardCharsets.UTF_8.name())
     }
+
+    // A second fixture whose info advertises x-spyglass-extensions (one cross-origin, one relative), for
+    // the ExtensionSeamAE test of the same-origin guard. Selected via the explorer's ?spec= override.
+    @GetMapping(value = '/v3/api-docs-ext', produces = MediaType.APPLICATION_JSON_VALUE)
+    String specWithExtensions() {
+        new ClassPathResource('apidocs-test/openapi-ext-fixture.json')
+                .inputStream.getText(StandardCharsets.UTF_8.name())
+    }
 }

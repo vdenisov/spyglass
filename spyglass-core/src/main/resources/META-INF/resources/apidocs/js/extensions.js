@@ -51,10 +51,12 @@ export function resolveHeaderLink(name, value) {
   return null
 }
 
-// Dynamically imports each configured extension module and calls its register(api). A failing
-// extension is logged and skipped — it must never break the core explorer.
-export async function loadExtensions(api) {
-  for (const url of api.config.extensions || []) {
+// Dynamically imports each extension module in the resolved list and calls its register(api). The
+// list is computed by App.js (operator-supplied entries, else same-origin spec-supplied ones), not
+// read from CONFIG here, so the trust filtering stays in one place. A failing extension is logged and
+// skipped — it must never break the core explorer.
+export async function loadExtensions(api, extensions) {
+  for (const url of extensions || []) {
     try {
       const module = await import(url)
       if (typeof module.register === 'function') await module.register(api)

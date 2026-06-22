@@ -1,0 +1,28 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Extension-discovery Fixture API",
+    "version": "1.0.0",
+    "x-service-name": "fixtureService",
+    "x-spyglass-extensions": [
+      "https://cross-origin.invalid/evil-extension.js",
+      "/spyglass-ext/probe/index.js"
+    ]
+  },
+  "paths": {
+    "/ping": {
+      "get": {
+        "tags": ["Ping"],
+        "summary": "Ping",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

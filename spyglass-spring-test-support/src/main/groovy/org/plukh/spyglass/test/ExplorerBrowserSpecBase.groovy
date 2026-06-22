@@ -111,6 +111,21 @@ abstract class ExplorerBrowserSpecBase extends Specification {
         page.locator('.he-row').first().locator('.he-val')
     }
 
+    /**
+     * Fills the Authorization header row with {@code value}, adding the row first when the explorer has
+     * none. The explorer ships no default Authorization row (a present-but-empty one is malformed and,
+     * on this same-origin explorer, can suppress the cookie/session auth the user already has); a row
+     * appears only once a user or extension adds it. The added row is the first, matching where the
+     * extension seam's setAuthorization unshifts it.
+     */
+    protected void fillAuth(String value) {
+        if (page.locator('.he-row').count() == 0) {
+            page.locator('.he-actions .btn-mini.add').click()
+            page.locator('.he-row').first().locator('.he-key').fill('Authorization')
+        }
+        authValueInput().fill(value)
+    }
+
     /** The rendered response body text (read-only CodeMirror viewer). */
     protected Locator respBody() {
         page.locator('.response .code-viewer .cm-content')

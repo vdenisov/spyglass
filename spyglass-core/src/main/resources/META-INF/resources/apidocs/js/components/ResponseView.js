@@ -93,16 +93,10 @@ export default {
 
     // Response headers as rows, with an optional deep link per value resolved by registered
     // extensions (see extensions.js). resolveHeaderLink reads the reactive resolver registry, so a
-    // resolver registered while extensions load is picked up. Falls back to parsing headersText for
-    // any response shape that predates headersList.
-    const headerRows = computed(() => {
-      const list = props.resp.headersList || (props.resp.headersText || '')
-        .split('\n').filter(Boolean).map((line) => {
-          const i = line.indexOf(': ')
-          return i < 0 ? { name: line, value: '' } : { name: line.slice(0, i), value: line.slice(i + 2) }
-        })
-      return list.map(({ name, value }) => ({ name, value, href: resolveHeaderLink(name, value) }))
-    })
+    // resolver registered while extensions load is picked up. Every response sets headersList (an
+    // error response has none, hence the [] fallback); headersText backs Copy only.
+    const headerRows = computed(() =>
+      (props.resp.headersList || []).map(({ name, value }) => ({ name, value, href: resolveHeaderLink(name, value) })))
     const headersCopied = ref(false)
     const copyHeaders = async () => {
       if (await copyText(props.resp.headersText || '')) {
@@ -140,6 +134,7 @@ export default {
       </div>
       <div v-if="resp.redirected" class="resp-redirect">↪ redirected to <code>{{ resp.finalUrl }}</code></div>
       <div v-if="resp.networkError" class="unsupported">Network error: {{ resp.networkError }}</div>
+      <div v-else-if="resp.cancelled" class="unsupported">Request cancelled.</div>
       <template v-else>
         <div class="resp-toolbar">
           <label v-if="kind === 'json'" class="resp-pretty"><input type="checkbox" v-model="pretty" /> Pretty-print</label>

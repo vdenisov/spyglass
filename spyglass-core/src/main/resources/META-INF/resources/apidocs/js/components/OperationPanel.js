@@ -323,6 +323,12 @@ export default {
     const downloadName = computed(() =>
       (props.operation.method + '-' + props.operation.path).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'response')
 
+    // The in-flight request's AbortController, so the user can cancel a slow send (there is
+    // deliberately no automatic timeout — some endpoints legitimately take minutes). Cleared when the
+    // send settles; aborted on unmount.
+    let inflight = null
+    const cancel = () => { if (inflight) inflight.abort() }
+
     const send = async () => {
       rawError.value = ''
       let req
@@ -336,11 +342,13 @@ export default {
       recordHistory()
       // Guard against an operation switch mid-request populating a stale response.
       const opAtStart = props.operation
+      const ctrl = new AbortController()
+      inflight = ctrl
       sending.value = true
       response.value = null
       try {
         const t0 = performance.now()
-        const res = await fetch(req.relUrl, { method: req.method, headers: req.headers, body: req.bodyData || req.bodyStr })
+        const res = await fetch(req.relUrl, { method: req.method, headers: req.headers, body: req.bodyData || req.bodyStr, signal: ctrl.signal })
         const dur = Math.round(performance.now() - t0)
         // Capture the exact bytes as a Blob; decode to text only for text-like (or unknown) types so
         // binary stays intact for preview/download. <ResponseView> renders from the Content-Type.
@@ -363,11 +371,16 @@ export default {
         }
       } catch (e) {
         if (props.operation !== opAtStart) return
-        response.value = { status: '—', statusText: '', ok: false, networkError: e.message }
+        // A user-driven cancel surfaces as a DOMException named AbortError — report it as a cancel, not
+        // a network failure (the response view renders `cancelled` without the "Network error:" prefix).
+        if (e.name === 'AbortError') response.value = { status: '—', statusText: '', ok: false, cancelled: true }
+        else response.value = { status: '—', statusText: '', ok: false, networkError: e.message }
       } finally {
+        if (inflight === ctrl) inflight = null
         if (props.operation === opAtStart) sending.value = false
       }
     }
+    onBeforeUnmount(cancel)
 
     // Ctrl/Cmd+Enter executes the request from anywhere on the operation. A capture-phase listener
     // runs before CodeMirror's default Mod-Enter ("insert blank line"), so it works inside the editor
@@ -456,7 +469,7 @@ export default {
     }
 
     return {
-      paramState, bodyTypes, mediaType, bodyMt, curKind, rebuildBody, bodyNode, bodySupported, useRaw, rawText, rawError, response, sending, copied,
+      paramState, bodyTypes, mediaType, bodyMt, curKind, rebuildBody, bodyNode, bodySupported, useRaw, rawText, rawError, response, sending, cancel, copied,
       tab, schemaView, requestRef, responseRefs, statusClass, editorSchema, mdBlock,
       requestExamples, reqCanPrefill, responseExamples, paramExampleGroups, hasAnyExamples, prefillRaw, prefillParam,
       setRaw, prettyRaw, send, copyCurl, copyHttp, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys
@@ -535,7 +548,8 @@ export default {
         <div class="send-bar">
           <span class="send-cta">
             <button class="btn-send" type="button" :disabled="sending" v-tip="'Send the request (' + sendHint + ')'" @click="send">{{ sending ? 'Sending…' : 'Send' }}</button>
-            <span class="kbd-hint" v-tip="'Keyboard shortcut to send the request'">{{ sendHint }}</span>
+            <button v-if="sending" class="btn-mini danger btn-cancel" type="button" v-tip="'Cancel the in-flight request'" @click="cancel">Cancel</button>
+            <span v-else class="kbd-hint" v-tip="'Keyboard shortcut to send the request'">{{ sendHint }}</span>
           </span>
           <button class="btn-mini" type="button" @click="copyCurl">Copy as cURL</button>
           <button class="btn-mini" type="button" @click="copyHttp">Copy as JetBrains .http</button>

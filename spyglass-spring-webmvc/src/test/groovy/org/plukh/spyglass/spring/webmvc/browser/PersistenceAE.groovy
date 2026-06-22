@@ -5,15 +5,15 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 /**
  * Persistence of request state and per-field value history. The Authorization value goes to
  * sessionStorage (short-lived token); other header rows, the auth form and field history go to
- * localStorage. "Clear all" resets the request inputs to an empty Authorization row but keeps
- * field history (which is managed per-value via each combobox's ✕).
+ * localStorage. "Clear all" clears the header rows but keeps field history (which is managed
+ * per-value via each combobox's ✕).
  */
 class PersistenceAE extends SpyglassSpecBase {
 
     def "splits the Authorization token into sessionStorage and other rows into localStorage"() {
         given:
         open('GET-/widgets/{id}')
-        authValueInput().fill('signature abc')
+        fillAuth('signature abc')
         page.locator('.he-actions .btn-mini.add').click()
         def row = page.locator('.he-row').last()
         row.locator('.he-key').fill('X-Env')
@@ -28,7 +28,7 @@ class PersistenceAE extends SpyglassSpecBase {
     def "restores headers after a reload (same session)"() {
         given:
         open('GET-/widgets/{id}')
-        authValueInput().fill('signature xyz')
+        fillAuth('signature xyz')
         page.locator('.he-actions .btn-mini.add').click()
         def row = page.locator('.he-row').last()
         row.locator('.he-key').fill('X-Env')
@@ -45,10 +45,10 @@ class PersistenceAE extends SpyglassSpecBase {
         page.locator('.he-row').last().locator('.he-val').inputValue() == 'staging'
     }
 
-    def "Clear all resets request inputs to an empty Authorization row but keeps saved history"() {
+    def "Clear all clears the header rows but keeps saved history"() {
         given:
         open('GET-/widgets/{id}')
-        authValueInput().fill('signature abc')
+        fillAuth('signature abc')
         page.locator('.he-actions .btn-mini.add').click()
         page.locator('.he-row').last().locator('.he-key').fill('X-Env')
         param('id').locator('.control input').fill('555')
@@ -58,9 +58,8 @@ class PersistenceAE extends SpyglassSpecBase {
         when:
         page.locator('.btn-clear-all').click()
 
-        then: 'the header rows reset to a single empty Authorization row'
-        page.locator('.he-row').count() == 1
-        authValueInput().inputValue() == ''
+        then: 'the header rows are cleared (the explorer keeps no default Authorization row)'
+        page.locator('.he-row').count() == 0
 
         and: 'field history is preserved (it is managed per-value, not by Clear all)'
         page.evaluate("() => localStorage.getItem('apidocs-field-history')").toString().contains('555')

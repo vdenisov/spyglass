@@ -144,6 +144,29 @@ public class DemoController {
     }
 
     @Operation(
+            summary = "Respond after a delay (try the Cancel button)",
+            description = "Demo — waits `seconds` (clamped to 0–30, default 5) before responding, so a "
+                    + "long-running request can be started and then cancelled from the explorer's "
+                    + "**Cancel** button while it is in flight. The wait is server-side; cancelling aborts "
+                    + "the browser request — the server still finishes its wait.")
+    @ApiResponse(responseCode = "200", description = "The delayed response, reporting the actual wait.")
+    @GetMapping("/slow")
+    public SlowResponse slow(
+            @Parameter(description = "How long to wait before responding, in seconds (clamped to 0–30).")
+            @RequestParam(value = "seconds", defaultValue = "5") int seconds) {
+        long waitMs = Math.clamp(seconds, 0, 30) * 1000L;
+        try {
+            Thread.sleep(waitMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return SlowResponse.builder()
+                .waitedMs(waitMs)
+                .message("Responded after " + waitMs + " ms.")
+                .build();
+    }
+
+    @Operation(
             summary = "Echo a payload (named examples everywhere)",
             description = "Demo — showcases spec-provided named `examples`: request-body examples (named, "
                     + "described and one external-value), parameter examples (a named map and a singular "
@@ -555,6 +578,20 @@ public class DemoController {
         String outcome;
 
         @Schema(description = "A human-readable message.")
+        String message;
+    }
+
+    /**
+     * Demo — the delayed response of {@code GET /slow}.
+     */
+    @Value
+    @Builder
+    public static class SlowResponse {
+
+        @Schema(description = "How long the server waited before responding, in milliseconds.")
+        long waitedMs;
+
+        @Schema(description = "A human-readable confirmation.")
         String message;
     }
 
