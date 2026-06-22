@@ -12,6 +12,30 @@
         Spyglass — an embeddable, no-build OpenAPI explorer for Spring Boot services. This parent
         aggregates the framework-neutral front-end core and the Spring integration modules.
     </description>
+    <url>https://github.com/vdenisov/spyglass</url>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://github.com/vdenisov/spyglass/blob/main/LICENSE</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>vdenisov</id>
+            <name>Victor Denisov</name>
+            <url>https://github.com/vdenisov</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/vdenisov/spyglass.git</connection>
+        <developerConnection>scm:git:git@github.com:vdenisov/spyglass.git</developerConnection>
+        <url>https://github.com/vdenisov/spyglass</url>
+        <tag>HEAD</tag>
+    </scm>
 
     <modules>
         <module>spyglass-core</module>
@@ -47,6 +71,18 @@
         <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
         <maven-failsafe-plugin.version>3.5.0</maven-failsafe-plugin.version>
         <maven-source-plugin.version>3.2.1</maven-source-plugin.version>
+        <maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
+        <!-- Release-only plugins (bound under the "release" profile; never run by a normal build). -->
+        <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
+        <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
+        <central-publishing-maven-plugin.version>0.7.0</central-publishing-maven-plugin.version>
+
+        <!--
+            Fixed build timestamp for reproducible artifacts (Maven Reproducible Builds). Bump to the
+            release date when cutting a release; a stale value only affects archive entry timestamps,
+            not behaviour.
+        -->
+        <project.build.outputTimestamp>2026-06-22T00:00:00Z</project.build.outputTimestamp>
     </properties>
 
     <dependencyManagement>
@@ -217,6 +253,65 @@
     </build>
 
     <profiles>
+        <!--
+            Release plumbing for publishing to Maven Central. INERT by default: nothing here runs
+            unless the build is invoked with -Prelease, and even then `deploy` only uploads to a
+            Central staging deployment (autoPublish=false) that is released manually from the Central
+            portal — so no profile or branch state can publish accidentally. Requires, at release time:
+              - a signing key reachable by gpg, and
+              - a <server id="central"> entry (Central Portal token) in settings.xml.
+            Source, javadoc, and signature artifacts are mandated by Central for every published jar.
+        -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <!-- Activates the attach-sources execution defined in pluginManagement. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>${maven-javadoc-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven-gpg-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central-publishing-maven-plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>false</autoPublish>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <!--
             The Boot 4 / springdoc 3 leg of the build-compatibility matrix. It only overrides the two
             BOM-import versions; every framework dependency is provided-scope and BOM-managed, so

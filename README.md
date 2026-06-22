@@ -99,5 +99,7 @@ extension names) may still change before 1.0.
 
 ## License
 
-[MIT](LICENSE). The vendored CodeMirror bundle's dependencies are attributed in
-[`spyglass-core/frontend/THIRD-PARTY-NOTICES.txt`](spyglass-core/frontend/THIRD-PARTY-NOTICES.txt).
+[MIT](LICENSE). The vendored front-end code — Vue, `marked`, and the CodeMirror bundle's
+dependencies — is attributed in
+[`spyglass-core/frontend/THIRD-PARTY-NOTICES.txt`](spyglass-core/frontend/THIRD-PARTY-NOTICES.txt),
+which is also shipped inside the `spyglass-core` jar under `META-INF/`.

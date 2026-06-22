@@ -23,6 +23,19 @@
         under the "exec" classifier, leaving the plain jar as the default artifact for that reuse.
     </description>
 
+    <properties>
+        <!--
+            A runnable showcase, not a published library: keep it out of any Maven Central release.
+            It is still `install`-ed locally so downstream demos can reuse its endpoints. The
+            release-only skips (signing, source, javadoc) just avoid wasted work — those plugins do
+            not run in a normal build.
+        -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+        <gpg.skip>true</gpg.skip>
+        <maven.source.skip>true</maven.source.skip>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+    </properties>
+
     <dependencies>
         <!-- The servlet adapter: brings spyglass-spring-core + spyglass-core assets and SpyglassConfiguration. -->
         <dependency>
