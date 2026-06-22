@@ -1,5 +1,7 @@
 package org.plukh.spyglass.spring.webmvc.browser
 
+import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
+
 /**
  * Spec loading and sidebar navigation: title from the spec, operations grouped by tag, the live
  * filter, deep-linking via the URL hash, and erasing of invalid anchors.
@@ -20,7 +22,7 @@ class NavigationAE extends SpyglassSpecBase {
         open()
 
         then:
-        page.locator('.op-link').count() == 14
+        page.locator('.op-link').count() == 15
         page.locator('.tag-name').allTextContents() == ['Action items', 'Bodies', 'Legacy', 'Lookups', 'Polymorphic', 'Widgets']
     }
 
@@ -90,20 +92,31 @@ class NavigationAE extends SpyglassSpecBase {
 
     // ---- keyboard navigation -------------------------------------------------
 
-    def "no operation is keyboard-highlighted on a passive load (nothing looks selected)"() {
+    def "shows a persistent keyboard-hint footer"() {
         given:
         open()
 
-        expect: 'a fresh load with no selection shows no kbd highlight, matching the empty panel'
-        page.locator('.op-link.kbd-active').count() == 0
+        expect:
+        page.locator('.sidebar-hint').isVisible()
+        page.locator('.sidebar-hint').textContent().contains('filter')
+        page.locator('.sidebar-hint').textContent().contains('navigate')
+    }
+
+    def "no operation is highlighted on a passive load (nothing looks selected)"() {
+        given:
+        open()
+
+        expect: 'a fresh load with no selection shows no highlight, matching the empty panel'
         page.locator('.op-link.active').count() == 0
+        page.locator('.op-list.kb-active').count() == 0
         page.locator('.status-msg').textContent().contains('Select an operation')
 
-        when: 'the filter is focused — the keyboard-navigation context where ↑/↓/Enter act'
+        when: 'the filter is focused — the sidebar becomes the active keyboard region'
         page.keyboard().press('/')
 
-        then: 'the first operation becomes the highlight anchor'
-        page.locator('.op-link.kbd-active').count() == 1
+        then: 'the list is keyboard-active and the first operation is the cursor'
+        page.locator('.op-list.kb-active').count() == 1
+        page.locator('.op-link.active').count() == 1
     }
 
     def "the / shortcut focuses the operation filter"() {
@@ -129,20 +142,38 @@ class NavigationAE extends SpyglassSpecBase {
         page.locator('.filter').inputValue() == '/'
     }
 
-    def "arrow keys highlight an operation and Enter opens it"() {
+    def "arrowing from the filter moves focus into the list and opens the focused op"() {
         given:
         open()
         page.keyboard().press('/')
 
-        when:
+        when: 'arrowing from the filter moves focus onto an op-link, which opens (selection follows focus)'
         page.keyboard().press('ArrowDown')
-        def highlighted = page.locator('.op-link.kbd-active .op-path').textContent()
-        page.keyboard().press('Enter')
+        def focused = page.locator('.op-link:focus .op-path').textContent()
+
+        then: 'the focused row is the highlighted cursor immediately, and the panel opens it (debounced)'
+        page.locator('.op-link.active .op-path').textContent() == focused
+        assertThat(page.locator('.op-header .op-path')).hasText(focused)
+    }
+
+    def "the filter shows a clear button that empties it"() {
+        given:
+        open()
+
+        expect: 'no clear button while the filter is empty'
+        page.locator('.filter-clear').count() == 0
+
+        when:
+        page.locator('.filter').fill('widgets')
 
         then:
-        page.waitForSelector('.op-panel')
-        page.locator('.op-header .op-path').textContent() == highlighted
-        page.locator('.op-link.active .op-path').textContent() == highlighted
+        page.locator('.filter-clear').isVisible()
+
+        when:
+        page.locator('.filter-clear').click()
+
+        then:
+        page.locator('.filter').inputValue() == ''
     }
 
     def "Escape clears the filter"() {

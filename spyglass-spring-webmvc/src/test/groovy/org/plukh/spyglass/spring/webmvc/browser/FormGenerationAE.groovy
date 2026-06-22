@@ -1,5 +1,6 @@
 package org.plukh.spyglass.spring.webmvc.browser
 
+import com.microsoft.playwright.Locator
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.options.FilePayload
 import com.microsoft.playwright.options.SelectOption
@@ -177,16 +178,53 @@ class FormGenerationAE extends SpyglassSpecBase {
         b.bark == 'woof'
     }
 
-    def "renders an anyOf body as a single-select variant with a hint"() {
+    def "renders an anyOf of object branches as multi-include checkboxes"() {
         given:
         open('POST-/notify')
 
-        expect: 'branches labelled by schema name, with the anyOf hint'
-        page.locator('.form-body .variant-select option').allTextContents() == ['EmailChannel', 'SmsChannel']
-        assertThat(page.locator('.form-body .variant-note')).isVisible()
+        expect: 'a checkbox per branch, labelled by schema name'
+        page.locator('.form-body .variant-branch').count() == 2
+        page.locator('.form-body .variant-branch-name').allTextContents() == ['EmailChannel', 'SmsChannel']
 
-        and: 'the first branch renders its fields'
+        and: 'the first branch is pre-checked (body is required) and shows its fields; the second is off'
+        branchBox('EmailChannel').isChecked()
+        !branchBox('SmsChannel').isChecked()
         field('email').count() == 1
+        field('phone').count() == 0
+
+        when: 'checking the second branch'
+        branchBox('SmsChannel').check()
+
+        then: 'both branch forms render together'
+        field('email').count() == 1
+        field('phone').count() == 1
+    }
+
+    def "keeps a scalar anyOf body single-select (not mergeable)"() {
+        given:
+        open('POST-/measure')
+
+        expect: 'the single-select dropdown is used, not the multi-branch checkboxes'
+        page.locator('.form-body .variant-select option').count() == 2
+        page.locator('.form-body .variant-branch').count() == 0
+
+        and: 'the "combine via Raw JSON" hint is shown'
+        assertThat(page.locator('.form-body .variant-note')).isVisible()
+    }
+
+    def "merges the checked anyOf branches into one request body"() {
+        given:
+        open('POST-/notify')
+        textInput('email').fill('a@b.com')
+        branchBox('SmsChannel').check()
+        textInput('phone').fill('123')
+
+        when:
+        def b = body(captureSend('**/notify'))
+
+        then:
+        b.email == 'a@b.com'
+        b.phone == '123'
     }
 
     def "hovering a type tag shows the themed tooltip (not the native title)"() {
@@ -381,6 +419,10 @@ class FormGenerationAE extends SpyglassSpecBase {
         page.locator('.warnings li').count() >= 1
         !page.locator('.btn-send').isDisabled()
 
+        and: 'the body path renders without the JSONPath root'
+        page.locator('.warnings li code').allTextContents().contains('name')
+        !page.locator('.warnings').textContent().contains('$')
+
         when:
         def cap = captureSend('**/widgets')
 
@@ -406,6 +448,12 @@ class FormGenerationAE extends SpyglassSpecBase {
     }
 
     // ---- helpers -------------------------------------------------------------
+
+    /** The include checkbox of a multi-branch anyOf branch addressed by its label. */
+    private Locator branchBox(String name) {
+        page.locator('.form-body .variant-branch', new Page.LocatorOptions().setHasText(name))
+                .locator('.variant-branch-head input[type=checkbox]')
+    }
 
     /** Opens the Schema tab and switches to its Examples view. */
     private void openExamplesTab() {

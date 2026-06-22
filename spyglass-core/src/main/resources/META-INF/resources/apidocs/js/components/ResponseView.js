@@ -2,7 +2,7 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { copyText } from '../clipboard.js'
 import { resolveHeaderLink } from '../extensions.js'
 import { loadJson, saveJson, RESPONSE_PRETTY_KEY } from '../storage.js'
-import { formatBytes } from '../format.js'
+import { formatBytes, statusKind } from '../format.js'
 import CodeViewer from './CodeViewer.js'
 
 // A small curated MIME→extension map for the download filename, used only when the response carries
@@ -128,16 +128,17 @@ export default {
 
     return {
       pretty, copied, kind, isText, displayText, sizeText, imageUrl, downloadFilename, copy, download,
-      headerRows, headersCopied, copyHeaders
+      headerRows, headersCopied, copyHeaders, statusKind
     }
   },
   template: `
     <div class="response">
-      <div class="resp-status" :class="resp.ok ? 'ok' : 'err'">
+      <div class="resp-status" :class="statusKind(resp.status)">
         <span class="code">{{ resp.status }} {{ resp.statusText }}</span>
         <span v-if="resp.durationMs != null" class="dur">{{ resp.durationMs }} ms</span>
         <span v-if="resp.contentType" class="resp-ct">{{ resp.contentType }}</span>
       </div>
+      <div v-if="resp.redirected" class="resp-redirect">↪ redirected to <code>{{ resp.finalUrl }}</code></div>
       <div v-if="resp.networkError" class="unsupported">Network error: {{ resp.networkError }}</div>
       <template v-else>
         <div class="resp-toolbar">

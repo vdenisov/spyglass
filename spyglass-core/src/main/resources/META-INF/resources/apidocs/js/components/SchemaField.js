@@ -188,16 +188,30 @@ export default {
         </div>
         <p v-if="node.description" class="field-desc" v-html="mdInline(node.description)"></p>
         <div class="variant-body" :class="{ nested: !!label, inactive: !!label && !required && !node.include }">
-          <label class="variant-select">
-            <span class="variant-select-label">Variant</span>
-            <select :value="node.selected" @change="pick" :disabled="!!label && !required && !node.include">
-              <option v-for="(v, i) in node.variants" :key="i" :value="i">{{ v.label }}</option>
-            </select>
-          </label>
-          <p v-if="node.keyword === 'anyOf'" class="variant-note">
-            anyOf allows more than one branch at once — fill one here, or use Raw JSON to combine several.
-          </p>
-          <SchemaField :node="node.child" :required="true" />
+          <template v-if="node.multi">
+            <p class="variant-note">anyOf — check any combination of branches; the body merges the ones you select.</p>
+            <div class="variant-multi">
+              <div v-for="(v, i) in node.variants" :key="i" class="variant-branch">
+                <label class="variant-branch-head">
+                  <input type="checkbox" class="include" v-model="v.include" />
+                  <span class="variant-branch-name">{{ v.label }}</span>
+                </label>
+                <div v-if="v.include" class="variant-branch-body"><SchemaField :node="v.child" :required="true" /></div>
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <label class="variant-select">
+              <span class="variant-select-label">Variant</span>
+              <select :value="node.selected" @change="pick" :disabled="!!label && !required && !node.include">
+                <option v-for="(v, i) in node.variants" :key="i" :value="i">{{ v.label }}</option>
+              </select>
+            </label>
+            <p v-if="node.keyword === 'anyOf'" class="variant-note">
+              anyOf allows more than one branch at once — fill one here, or use Raw JSON to combine several.
+            </p>
+            <SchemaField :node="node.child" :required="true" />
+          </template>
         </div>
       </template>
 

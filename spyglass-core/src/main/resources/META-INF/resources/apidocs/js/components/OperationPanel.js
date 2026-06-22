@@ -3,6 +3,7 @@ import { makeNode, serializeNode, importValue, requestBodyMediaTypes, serializeM
 import { mdBlock } from '../markdown.js'
 import { getValues, recordValue, removeValue, paramKey, bodyFieldKey } from '../history.js'
 import { copyText } from '../clipboard.js'
+import { statusKind } from '../format.js'
 import ParamInputs from './ParamInputs.js'
 import ResponseView from './ResponseView.js'
 
@@ -79,7 +80,7 @@ export default {
       examples: r.examples || [],
       tree: r.schema ? schemaTree(r.schema) : null
     })))
-    const statusClass = (status) => (String(status).startsWith('2') ? 'ok' : 'err')
+    const statusClass = (status) => statusKind(status)
 
     // --- Schema → Examples gallery -------------------------------------------
     //
@@ -313,6 +314,10 @@ export default {
       if (bodyNode.value && !useRaw.value && bodySupported.value) w.push(...collectBodyWarnings(bodyNode.value))
       return w
     })
+    // Body warnings carry a JSONPath path ($, $.name, $.address.city, $[0].sku). Drop the cryptic
+    // root for display: top-level → the bare field name, nested keep their dotted path, the whole body
+    // → "body". Parameter paths (e.g. "query limit") don't start with $ and pass through unchanged.
+    const fmtWarnPath = (p) => p === '$' ? 'body' : p.startsWith('$.') ? p.slice(2) : p.startsWith('$') ? p.slice(1) : p
 
     // Base filename for a downloaded response body (extension added by <ResponseView>).
     const downloadName = computed(() =>
@@ -348,6 +353,9 @@ export default {
         const headerEntries = Object.entries(hdrs)
         response.value = {
           status: res.status, statusText: res.statusText, ok: res.ok, durationMs: dur,
+          // The browser follows 3xx transparently (it won't expose the intermediate redirect to JS);
+          // these two flags are the only signal that one happened, surfaced as a note in the view.
+          redirected: res.redirected, finalUrl: res.url,
           contentType: ct, blob, rawBody, contentDisposition: res.headers.get('content-disposition') || '',
           // Structured rows back the per-header rendering (link resolution); headersText backs Copy.
           headersList: headerEntries.map(([name, value]) => ({ name, value })),
@@ -374,6 +382,23 @@ export default {
     }
     onMounted(() => document.addEventListener('keydown', onExecKey, true))
     onBeforeUnmount(() => document.removeEventListener('keydown', onExecKey, true))
+
+    // Roving-focus arrow navigation for a tablist (Try/Schema, Form/Raw, Schema/Examples). ←/→ wrap
+    // between the enabled tabs, Home/End jump to the ends; the moved-to tab is focused and activated
+    // (selection follows focus, the standard tabs pattern). Activation itself stays on the @click.
+    const onTabKeys = (e) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
+      e.preventDefault()
+      const tabs = Array.from(e.currentTarget.parentElement.querySelectorAll('[role=tab]:not([disabled])'))
+      const cur = tabs.indexOf(e.currentTarget)
+      let next = cur
+      if (e.key === 'ArrowLeft') next = cur > 0 ? cur - 1 : tabs.length - 1
+      else if (e.key === 'ArrowRight') next = cur < tabs.length - 1 ? cur + 1 : 0
+      else if (e.key === 'Home') next = 0
+      else if (e.key === 'End') next = tabs.length - 1
+      const el = tabs[next]
+      if (el) { el.focus(); el.click() }
+    }
 
     const copyToClipboard = async (text) => {
       if (await copyText(text)) {
@@ -434,7 +459,7 @@ export default {
       paramState, bodyTypes, mediaType, bodyMt, curKind, rebuildBody, bodyNode, bodySupported, useRaw, rawText, rawError, response, sending, copied,
       tab, schemaView, requestRef, responseRefs, statusClass, editorSchema, mdBlock,
       requestExamples, reqCanPrefill, responseExamples, paramExampleGroups, hasAnyExamples, prefillRaw, prefillParam,
-      setRaw, prettyRaw, send, copyCurl, copyHttp, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, sendHint
+      setRaw, prettyRaw, send, copyCurl, copyHttp, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys
     }
   },
   template: `
@@ -450,12 +475,14 @@ export default {
         <a :href="operation.externalDocs.url" target="_blank" rel="noopener">{{ operation.externalDocs.description || 'External documentation' }} ↗</a>
       </p>
 
-      <div class="op-tabs">
-        <button type="button" :class="{ active: tab === 'try' }" @click="tab = 'try'">Try it out</button>
-        <button type="button" :class="{ active: tab === 'schema' }" @click="tab = 'schema'">Schema</button>
+      <div class="op-tabs" role="tablist" aria-label="Operation views">
+        <button type="button" role="tab" :aria-selected="tab === 'try'" :tabindex="tab === 'try' ? 0 : -1"
+          :class="{ active: tab === 'try' }" @click="tab = 'try'" @keydown="onTabKeys">Try it out</button>
+        <button type="button" role="tab" :aria-selected="tab === 'schema'" :tabindex="tab === 'schema' ? 0 : -1"
+          :class="{ active: tab === 'schema' }" @click="tab = 'schema'" @keydown="onTabKeys">Schema</button>
       </div>
 
-      <div v-show="tab === 'try'">
+      <div v-show="tab === 'try'" role="tabpanel">
         <ParamInputs v-if="paramState.length" :params="paramState" :history="paramHistory" :forget="forgetParam" />
 
         <div v-if="bodyTypes.length" class="body-section">
@@ -465,9 +492,11 @@ export default {
                     v-tip="'Request body content type'">
               <option v-for="t in bodyTypes" :key="t.mediaType" :value="t.mediaType">{{ t.mediaType }}</option>
             </select>
-            <div v-if="curKind === 'json'" class="body-tabs">
-              <button type="button" :class="{ active: !useRaw }" :disabled="!bodySupported" @click="setRaw(false)">Form</button>
-              <button type="button" :class="{ active: useRaw }" @click="setRaw(true)">Raw JSON</button>
+            <div v-if="curKind === 'json'" class="body-tabs" role="tablist" aria-label="Body editor">
+              <button type="button" role="tab" :aria-selected="!useRaw" :tabindex="!useRaw ? 0 : -1"
+                :class="{ active: !useRaw }" :disabled="!bodySupported" @click="setRaw(false)" @keydown="onTabKeys">Form</button>
+              <button type="button" role="tab" :aria-selected="useRaw" :tabindex="useRaw ? 0 : -1"
+                :class="{ active: useRaw }" @click="setRaw(true)" @keydown="onTabKeys">Raw JSON</button>
             </div>
           </div>
 
@@ -499,7 +528,7 @@ export default {
         <div v-if="warnings.length" class="warnings" role="status">
           <div class="warnings-head">⚠ {{ warnings.length }} warning{{ warnings.length > 1 ? 's' : '' }} — you can still send</div>
           <ul>
-            <li v-for="(w, i) in warnings" :key="i"><code>{{ w.path }}</code> — {{ w.message }}</li>
+            <li v-for="(w, i) in warnings" :key="i"><code>{{ fmtWarnPath(w.path) }}</code> — {{ w.message }}</li>
           </ul>
         </div>
 
@@ -516,10 +545,12 @@ export default {
         <ResponseView v-if="response" :resp="response" :name="downloadName" />
       </div>
 
-      <div v-show="tab === 'schema'" class="schema-doc">
-        <div class="body-tabs schema-toggle">
-          <button type="button" :class="{ active: schemaView === 'schema' }" @click="schemaView = 'schema'">Schema</button>
-          <button type="button" :class="{ active: schemaView === 'examples' }" @click="schemaView = 'examples'">Examples</button>
+      <div v-show="tab === 'schema'" class="schema-doc" role="tabpanel">
+        <div class="body-tabs schema-toggle" role="tablist" aria-label="Schema views">
+          <button type="button" role="tab" :aria-selected="schemaView === 'schema'" :tabindex="schemaView === 'schema' ? 0 : -1"
+            :class="{ active: schemaView === 'schema' }" @click="schemaView = 'schema'" @keydown="onTabKeys">Schema</button>
+          <button type="button" role="tab" :aria-selected="schemaView === 'examples'" :tabindex="schemaView === 'examples' ? 0 : -1"
+            :class="{ active: schemaView === 'examples' }" @click="schemaView = 'examples'" @keydown="onTabKeys">Examples</button>
         </div>
 
         <template v-if="schemaView === 'schema'">

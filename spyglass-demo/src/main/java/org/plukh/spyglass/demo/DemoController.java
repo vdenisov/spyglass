@@ -12,10 +12,12 @@ import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.Builder;
 import lombok.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +35,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -81,10 +84,63 @@ public class DemoController {
 
     @Operation(
             summary = "Send a payload (anyOf)",
-            description = "Demo — exercises the anyOf variant selector (no discriminator) and the anyOf hint.")
+            description = "Demo — exercises the multi-branch anyOf form: both object branches can be checked at "
+                    + "once and the body merges them (a scalar anyOf would stay single-select instead).")
     @PostMapping("/payloads")
     public PayloadRequest createPayload(@RequestBody PayloadRequest request) {
         return request;
+    }
+
+    @Operation(
+            summary = "Wide form (~50 fields) — render/keyboard performance probe",
+            description = "Demo — a deliberately large request body of mixed field kinds, for checking that "
+                    + "form rendering and arrow-key navigation stay smooth on a complex operation.")
+    @PostMapping("/wide")
+    public WideForm submitWide(@RequestBody WideForm form) {
+        return form;
+    }
+
+    @Operation(
+            summary = "Return a chosen HTTP outcome",
+            description = "Demo — pick an `outcome` and the endpoint replies with that HTTP status and a "
+                    + "matching body, so Try It Out exercises 2xx **and** non-2xx response rendering. The "
+                    + "Schema tab lists every documented status.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "The request succeeded.",
+                    content = @Content(schema = @Schema(implementation = OutcomePayload.class),
+                            examples = @ExampleObject(value = "{\"outcome\": \"OK\", \"message\": \"Everything worked.\"}"))),
+            @ApiResponse(responseCode = "302", description = "Redirects to the OK outcome (the browser follows it automatically).",
+                    headers = @Header(name = "Location", description = "The URL to follow.",
+                            schema = @Schema(type = "string"))),
+            @ApiResponse(responseCode = "400", description = "The request was invalid.",
+                    content = @Content(schema = @Schema(implementation = ApiError.class),
+                            examples = @ExampleObject(value = "{\"code\": \"BAD_REQUEST\", \"message\": \"The outcome you chose maps to HTTP 400.\"}"))),
+            @ApiResponse(responseCode = "404", description = "Nothing matched the request.",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "409", description = "The request conflicted with current state.",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "500", description = "Something went wrong on the server.",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    @GetMapping("/outcomes")
+    public ResponseEntity<Object> outcomes(
+            @Parameter(description = "Which HTTP outcome the endpoint should return.")
+            @RequestParam(value = "outcome", defaultValue = "OK") Outcome outcome) {
+        if (outcome == Outcome.OK) {
+            return ResponseEntity.ok(OutcomePayload.builder()
+                    .outcome(outcome.name())
+                    .message("Everything worked.")
+                    .build());
+        }
+        if (outcome == Outcome.REDIRECT) {
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .location(URI.create("/apidocs-demo/outcomes?outcome=OK"))
+                    .build();
+        }
+        return ResponseEntity.status(outcome.status).body(ApiError.builder()
+                .code(outcome.name())
+                .message("The outcome you chose maps to HTTP " + outcome.status.value() + ".")
+                .build());
     }
 
     @Operation(
@@ -369,6 +425,151 @@ public class DemoController {
 
         @Schema(description = "A numeric amount.")
         Integer amount;
+    }
+
+    /**
+     * Demo — a deliberately wide request body (~50 fields of mixed kinds, plus a nested object) used as
+     * a performance probe for form rendering and keyboard navigation on a complex operation.
+     */
+    @Value
+    @Builder
+    public static class WideForm {
+
+        String name;
+        String title;
+        String summary;
+        String description;
+        String category;
+        String subcategory;
+        String code;
+        String reference;
+        String externalId;
+        String slug;
+        String label;
+        String group;
+        String owner;
+        String department;
+        String region;
+        String country;
+        String city;
+        String street;
+        String postalCode;
+        String phone;
+
+        @Schema(format = "email")
+        String email;
+
+        @Schema(format = "uri")
+        String website;
+
+        @Schema(format = "uuid")
+        String correlationId;
+
+        @Schema(format = "date")
+        String startDate;
+
+        @Schema(format = "date-time")
+        String createdAt;
+
+        Integer count;
+        Integer quantity;
+        Integer priority;
+        Integer weight;
+        Integer height;
+        Integer width;
+        Integer depth;
+        Integer score;
+        Integer rank;
+        Integer version;
+
+        Boolean active;
+        Boolean archived;
+        Boolean featured;
+        Boolean hidden;
+        Boolean locked;
+        Boolean verified;
+
+        @Schema(allowableValues = {"LOW", "MEDIUM", "HIGH"})
+        String severity;
+
+        @Schema(allowableValues = {"NEW", "OPEN", "CLOSED"})
+        String state;
+
+        @Schema(allowableValues = {"RED", "GREEN", "BLUE"})
+        String color;
+
+        Double amount;
+        Double rate;
+
+        @ArraySchema(schema = @Schema(type = "string"))
+        List<String> tags;
+
+        @ArraySchema(schema = @Schema(type = "string"))
+        List<String> notes;
+
+        @Schema(description = "A nested object, exercising recursive form rendering.")
+        WideAddress address;
+    }
+
+    /**
+     * Demo — the nested object of {@link WideForm}.
+     */
+    @Value
+    @Builder
+    public static class WideAddress {
+
+        String line1;
+        String line2;
+        String city;
+        String postalCode;
+    }
+
+    /**
+     * Demo — the HTTP outcome to return from {@code GET /outcomes}; each maps to a status code so Try
+     * It Out can exercise 2xx and non-2xx rendering.
+     */
+    public enum Outcome {
+
+        OK(HttpStatus.OK),
+        REDIRECT(HttpStatus.FOUND),
+        BAD_REQUEST(HttpStatus.BAD_REQUEST),
+        NOT_FOUND(HttpStatus.NOT_FOUND),
+        CONFLICT(HttpStatus.CONFLICT),
+        SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR);
+
+        private final HttpStatus status;
+
+        Outcome(HttpStatus status) {
+            this.status = status;
+        }
+    }
+
+    /**
+     * Demo — the success body of {@code GET /outcomes}.
+     */
+    @Value
+    @Builder
+    public static class OutcomePayload {
+
+        @Schema(description = "The outcome that was returned.")
+        String outcome;
+
+        @Schema(description = "A human-readable message.")
+        String message;
+    }
+
+    /**
+     * Demo — a generic error body returned for the non-2xx outcomes of {@code GET /outcomes}.
+     */
+    @Value
+    @Builder
+    public static class ApiError {
+
+        @Schema(description = "A machine-readable error code.")
+        String code;
+
+        @Schema(description = "A human-readable error message.")
+        String message;
     }
 
     /**

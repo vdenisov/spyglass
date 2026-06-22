@@ -152,7 +152,8 @@ export function makeNode(schema, required = false, seen = new Set()) {
   }
 
   // oneOf/anyOf: a choice between sub-schemas. Rendered as a variant selector plus the chosen
-  // branch's form (see makeVariant). anyOf is treated like oneOf — one branch at a time.
+  // branch's form (see makeVariant). oneOf is always single-branch; an anyOf of object branches is
+  // multi-branch (check any combination — they deep-merge), otherwise it falls back to single-branch.
   if (Array.isArray(s.oneOf) || Array.isArray(s.anyOf)) {
     const v = makeVariant(s, required, d.seen)
     if (v) return v
@@ -290,13 +291,44 @@ function makeVariant(s, required, seen) {
     discValue: disc ? discValueFor(sub, mappingByRef) : null,
     schema: sub, seen
   }))
+
+  // An anyOf whose branches are all objects can be filled together: each branch keeps its own form
+  // and include toggle, and the serialized body deep-merges the checked branches (serializeNode).
+  // Any non-object branch (e.g. string|integer) can't be merged into one value, so such an anyOf —
+  // like every oneOf — stays single-select. The first branch is pre-checked when the body is required.
+  if (keyword === 'anyOf' && variants.length > 1) {
+    for (const v of variants) v.child = makeNode(v.schema, true, v.seen)
+    if (variants.every(v => v.child.kind === 'object')) {
+      variants.forEach((v, i) => { v.include = i === 0 && required })
+      return reactive({
+        kind: 'variant', schema: s, required, description: s.description, keyword,
+        discriminator: null, multi: true, variants, include: required
+      })
+    }
+    for (const v of variants) v.child = null // discard the probe children; the single-select path lazily rebuilds one
+  }
+
   const node = reactive({
     kind: 'variant', schema: s, required, description: s.description, keyword,
-    discriminator: disc ? disc.propertyName : null,
+    discriminator: disc ? disc.propertyName : null, multi: false,
     variants, selected: 0, include: required, child: null
   })
   buildVariantChild(node)
   return node
+}
+
+// Recursively merges plain-object source into target (used to combine the checked branches of a
+// multi-branch anyOf). Arrays and scalars overwrite; overlapping object keys merge, last write wins.
+function deepMerge(target, source) {
+  for (const [k, v] of Object.entries(source)) {
+    const cur = target[k]
+    if (v && typeof v === 'object' && !Array.isArray(v) && cur && typeof cur === 'object' && !Array.isArray(cur)) {
+      deepMerge(cur, v)
+    } else {
+      target[k] = v
+    }
+  }
+  return target
 }
 
 export function addArrayItem(node) {
@@ -371,9 +403,21 @@ export function serializeNode(node) {
       if (Object.keys(obj).length === 0 && !node.required) return OMIT
       return obj
     }
-    case 'variant':
+    case 'variant': {
       if (!node.required && !node.include) return OMIT
-      return serializeNode(node.child)
+      if (!node.multi) return serializeNode(node.child)
+      // Multi-branch anyOf: deep-merge every checked branch's object into one body.
+      const merged = {}
+      let any = false
+      for (const v of node.variants) {
+        if (!v.include) continue
+        const part = serializeNode(v.child)
+        if (part === OMIT) continue
+        any = true
+        if (part && typeof part === 'object' && !Array.isArray(part)) deepMerge(merged, part)
+      }
+      return any || node.required ? merged : OMIT
+    }
     case 'file':
       // Files never go into a JSON/urlencoded payload — they're handled by the multipart serializer.
       return OMIT
@@ -434,6 +478,18 @@ export function importValue(node, value) {
       break
     case 'variant':
       node.include = value !== undefined
+      if (node.multi) {
+        // Check each branch the incoming object overlaps (shares a property with) and import the
+        // overlap into it. Lossy by nature — anyOf branches can overlap — but predictable.
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          for (const v of node.variants) {
+            const overlaps = ((v.child && v.child.fields) || []).some(f => f.key in value)
+            v.include = overlaps
+            if (overlaps) importValue(v.child, value)
+          }
+        }
+        break
+      }
       // With a discriminator, switch to the branch whose value matches the incoming payload.
       if (node.discriminator && value && typeof value === 'object') {
         const dv = value[node.discriminator]
@@ -497,7 +553,13 @@ export function collectBodyWarnings(node, path = '$') {
       break
     case 'variant':
       if (!node.required && !node.include) break
-      out.push(...collectBodyWarnings(node.child, path))
+      if (node.multi) {
+        const checked = node.variants.filter(v => v.include)
+        if (node.required && checked.length === 0) { out.push({ path, message: 'select at least one branch' }); break }
+        for (const v of checked) out.push(...collectBodyWarnings(v.child, path))
+      } else {
+        out.push(...collectBodyWarnings(node.child, path))
+      }
       break
     case 'file':
       if (node.required && (!node.files || node.files.length === 0)) out.push({ path, message: 'required, but no file chosen' })

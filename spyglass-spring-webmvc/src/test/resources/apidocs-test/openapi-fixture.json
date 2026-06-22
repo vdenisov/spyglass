@@ -109,6 +109,24 @@
         }
       }
     },
+    "/measure": {
+      "post": {
+        "tags": ["Polymorphic"],
+        "summary": "Submit a measure (scalar anyOf)",
+        "description": "The body is an `anyOf` of scalar branches — not mergeable, so it stays single-select.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Measure" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "ok" }
+        }
+      }
+    },
     "/uploads": {
       "post": {
         "tags": ["Bodies"],
@@ -470,6 +488,12 @@
         "properties": {
           "phone": { "type": "string" }
         }
+      },
+      "Measure": {
+        "anyOf": [
+          { "type": "string" },
+          { "type": "integer" }
+        ]
       }
     }
   }
