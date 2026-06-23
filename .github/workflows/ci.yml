@@ -62,7 +62,7 @@ jobs:
       - name: Install Playwright browser + OS dependencies
         run: >
           mvn -B -pl spyglass-spring-test-support
-          org.codehaus.mojo:exec-maven-plugin:3.5.1:java
+          exec:java
           -Dexec.mainClass=com.microsoft.playwright.CLI
           -Dexec.args="install --with-deps chromium"
           -Dexec.cleanupDaemonThreads=false

@@ -5,8 +5,8 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
-import org.apache.commons.lang3.StringUtils;
 import org.springdoc.core.customizers.OpenApiCustomizer;
+import org.springframework.util.StringUtils;
 
 /**
  * Additively customizes the generated OpenAPI document for Spyglass, rather than replacing the whole
@@ -27,6 +27,11 @@ import org.springdoc.core.customizers.OpenApiCustomizer;
  * <p>It targets the springdoc-<b>common</b> {@link OpenApiCustomizer} SPI and the
  * {@code io.swagger.v3.oas.models} object model, both shared across the servlet and reactive stacks
  * and across springdoc 2.x / 3.x.
+ *
+ * <p>The check-then-act guards (skip the scheme/requirement when already present) make re-invocation
+ * idempotent but are not atomic. That is safe because springdoc builds and customizes each group's
+ * {@code OpenAPI} on a single thread; this customizer assumes that single-threaded invocation rather
+ * than synchronizing on the shared model.
  */
 public class SpyglassOpenApiCustomizer implements OpenApiCustomizer {
 
@@ -50,13 +55,13 @@ public class SpyglassOpenApiCustomizer implements OpenApiCustomizer {
         // Default the title to "<service> API" unless the consumer set a real one. springdoc always
         // pre-fills its own placeholder ("OpenAPI definition"), so treat that as unset too. With no app
         // name, fall back to a bare "API" rather than a leading-space " API".
-        if (StringUtils.isBlank(info.getTitle()) || SPRINGDOC_DEFAULT_TITLE.equals(info.getTitle())) {
-            var name = StringUtils.trimToEmpty(applicationName);
+        if (!StringUtils.hasText(info.getTitle()) || SPRINGDOC_DEFAULT_TITLE.equals(info.getTitle())) {
+            var name = applicationName == null ? "" : applicationName.strip();
             info.setTitle(name.isEmpty() ? "API" : name + " API");
         }
         // Expose the service name only when we actually have one, and never overwrite a value the
         // consumer (or an earlier customizer run) already set.
-        if (StringUtils.isNotBlank(applicationName)
+        if (StringUtils.hasText(applicationName)
                 && (info.getExtensions() == null || !info.getExtensions().containsKey("x-service-name"))) {
             info.addExtension("x-service-name", applicationName);
         }

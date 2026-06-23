@@ -106,6 +106,19 @@ for (const input of Object.keys(result.metafile.inputs)) {
   pkgs.set(key, { license, text })
 }
 
+// Fail loudly if an override key no longer matches a bundled package — e.g. the dependency bumped its
+// version (so `valid-url@1.0.9` becomes `valid-url@1.0.10`) or was dropped. Without this, a stale key is
+// silently ignored and the label falls through to UNKNOWN in the notices. Forces a conscious re-check of
+// the override (re-confirm the license, bump the key, or remove it), matching the fail-on-drift stance
+// of the other interventions in this script.
+for (const key of Object.keys(LICENSE_OVERRIDES)) {
+  if (!pkgs.has(key)) {
+    throw new Error(`LICENSE_OVERRIDES has a stale key "${key}": no bundled package matches it. ` +
+      `The dependency likely changed version or was dropped — re-confirm its license, then update or ` +
+      `remove the override.`)
+  }
+}
+
 // --- hand-vendored runtime libraries (served via the import map, not bundled here) ----------
 // Vue and marked are vendored directly as ESM under apidocs/vendor/ and loaded through the HTML
 // import map, so they never pass through esbuild and are absent from the metafile above. They ship

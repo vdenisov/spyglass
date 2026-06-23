@@ -44,8 +44,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Opt-in demo/showcase for the explorer, registered only when {@code apidocs.demo.enabled=true}
- * (see {@link DemoEndpointsConfiguration}) — never bound by default.
+ * Opt-in demo/showcase for the explorer, contributed via {@link DemoEndpointsConfiguration} (gated on
+ * {@code apidocs.demo.enabled=true}) for consumers that don't component-scan this package.
  *
  * <p>It exercises explorer features the host service's real spec may not contain: deprecated-operation
  * and dropped-metadata surfacing (deprecated banner, parameter descriptions + markers, externalDocs
