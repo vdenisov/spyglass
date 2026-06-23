@@ -11,6 +11,7 @@
 // asynchronously, once the spec is in) still renders.
 
 import { reactive } from 'vue'
+import { isSafeHref } from './config.js'
 
 export const registry = reactive({
   // Vue component definitions rendered in the headers editor (where the org's auth UI lives).
@@ -36,14 +37,15 @@ export function registerHeaderLinkResolver(fn) {
   if (typeof fn === 'function') registry.headerLinkResolvers.push(fn)
 }
 
-// Returns the first non-null URL a registered resolver produces for this response header, or null
-// when none applies (the value then renders as plain text). A throwing resolver is skipped, so a
-// faulty extension can never break the response view.
+// Returns the first safe non-null URL a registered resolver produces for this response header, or null
+// when none applies (the value then renders as plain text). An unsafe-scheme URL (javascript:/data:) is
+// skipped like a null, and a throwing resolver is skipped too, so a faulty or hostile extension can
+// never break the response view or inject a script: href.
 export function resolveHeaderLink(name, value) {
   for (const resolve of registry.headerLinkResolvers) {
     try {
       const url = resolve(name, value)
-      if (url) return url
+      if (url && isSafeHref(url)) return url
     } catch (e) {
       console.error('[spyglass] header-link resolver failed:', e)
     }

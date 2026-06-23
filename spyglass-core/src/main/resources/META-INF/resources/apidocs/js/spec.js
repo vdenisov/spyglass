@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { isSafeHref } from './config.js'
 
 // The loaded OpenAPI document. Set by loadSpec and used as the resolution root for $ref.
 let ROOT = null
@@ -587,7 +588,7 @@ export function collectOperations() {
         description: op.description || '',
         operationId: op.operationId || '',
         deprecated: !!op.deprecated,
-        externalDocs: op.externalDocs || null,
+        externalDocs: sanitizeExternalDocs(op.externalDocs),
         tags: op.tags && op.tags.length ? op.tags : ['default'],
         parameters: [...(item.parameters || []), ...(op.parameters || [])],
         requestBody: op.requestBody || null,
@@ -596,6 +597,18 @@ export function collectOperations() {
     }
   }
   return ops
+}
+
+// Spec-supplied link targets (operation externalDocs.url, example externalValue) flow into <a href>;
+// blank any whose scheme isn't safe (see config.js isSafeHref) so the templates' v-if-on-presence
+// simply hides the link rather than rendering a javascript:/data: URL in the explorer's origin.
+function safeHref(url) {
+  return isSafeHref(url) ? url : ''
+}
+
+function sanitizeExternalDocs(ed) {
+  if (!ed) return null
+  return ed.url && !isSafeHref(ed.url) ? { ...ed, url: '' } : ed
 }
 
 // Normalizes the OpenAPI named-`examples` map (and the singular `example`) of any holder — a media
@@ -608,7 +621,7 @@ export function namedExamples(holder) {
   if (holder.examples && typeof holder.examples === 'object') {
     for (const [name, ex] of Object.entries(holder.examples)) {
       if (!ex || typeof ex !== 'object') continue
-      out.push({ name, summary: ex.summary || '', description: ex.description || '', value: ex.value, externalValue: ex.externalValue || '' })
+      out.push({ name, summary: ex.summary || '', description: ex.description || '', value: ex.value, externalValue: safeHref(ex.externalValue) })
     }
   }
   if (!out.length && holder.example !== undefined) {

@@ -106,4 +106,37 @@ class ExtensionSeamAE extends SpyglassSpecBase {
                 empty             : false
         ]
     }
+
+    def "isSafeHref allows http(s)/mailto/relative and rejects javascript:/data:/other schemes"() {
+        given:
+        open()
+
+        expect: 'spec/extension link targets are scheme-allowlisted before reaching <a href>'
+        page.evaluate('''async () => {
+            const m = await import('/apidocs/js/config.js')
+            const f = m.isSafeHref
+            const origin = window.location.origin
+            return {
+                http              : f('http://example.com/docs'),
+                https             : f('https://example.com/docs'),
+                mailto            : f('mailto:team@example.com'),
+                relative          : f('/docs/api'),
+                sameOriginAbsolute: f(origin + '/docs'),
+                javascriptScheme  : f('javascript:alert(document.cookie)'),
+                dataScheme        : f('data:text/html,<script>alert(1)</script>'),
+                ftpScheme         : f('ftp://example.com/file'),
+                empty             : f('')
+            }
+        }''') == [
+                http              : true,
+                https             : true,
+                mailto            : true,
+                relative          : true,
+                sameOriginAbsolute: true,
+                javascriptScheme  : false,
+                dataScheme        : false,
+                ftpScheme         : false,
+                empty             : false
+        ]
+    }
 }
