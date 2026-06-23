@@ -9,6 +9,10 @@ import { highlightJson, escapeHtml } from '../jsonHighlight.js'
 // `prefill` with the raw value — the host applies it (request body → Raw editor; parameter → field) —
 // and the card flashes a brief confirmation.
 //
+// In `compact` mode (parameter examples), a single-line scalar value collapses to one dense row —
+// name · value pill · inline summary · Apply button — with any multi-sentence description dropping to
+// a muted line below. Object/array, multi-line or external values fall back to the full card layout.
+//
 // Registered globally (app.js) so any template (OperationPanel) can use <ExampleCard>.
 export default {
   name: 'ExampleCard',
@@ -19,7 +23,8 @@ export default {
     value: { default: undefined },
     externalValue: { type: String, default: '' },
     canPrefill: { type: Boolean, default: false },
-    prefillLabel: { type: String, default: 'Prefill Raw JSON' }
+    prefillLabel: { type: String, default: 'Prefill Raw JSON' },
+    compact: { type: Boolean, default: false }
   },
   emits: ['prefill'],
   setup(props, { emit }) {
@@ -31,6 +36,9 @@ export default {
     })
     const html = computed(() => isJson.value ? highlightJson(text.value) : escapeHtml(text.value))
     const showPrefill = computed(() => props.canPrefill && !props.externalValue)
+    // The compact one-liner only fits a single-line scalar; everything else uses the full layout.
+    const inlineValue = computed(() =>
+      props.compact && !isJson.value && !props.externalValue && text.value !== '' && !text.value.includes('\n'))
 
     const applied = ref(false)
     let timer = null
@@ -40,22 +48,37 @@ export default {
       clearTimeout(timer)
       timer = setTimeout(() => { applied.value = false }, 1500)
     }
-    return { text, html, showPrefill, applied, apply, mdInline }
+    return { text, html, showPrefill, inlineValue, applied, apply, mdInline }
   },
   template: `
-    <div class="example-card">
-      <div class="example-card-head">
-        <span class="example-name">{{ name }}</span>
-        <span v-if="summary" class="example-summary">{{ summary }}</span>
-        <span v-if="showPrefill" class="example-apply-cluster">
-          <span v-if="applied" class="example-applied" role="status">✓ Applied</span>
-          <button type="button" class="btn-mini example-prefill" @click="apply"
-                  v-tip="'Apply this example'">{{ prefillLabel }}</button>
-        </span>
-      </div>
-      <div v-if="description" class="example-desc" v-html="mdInline(description)"></div>
-      <a v-if="externalValue" class="example-ext" :href="externalValue" target="_blank" rel="noopener">{{ externalValue }} ↗</a>
-      <pre v-else-if="text" class="example-json" v-html="html"></pre>
+    <div class="example-card" :class="{ 'example-card-compact': inlineValue }">
+      <template v-if="inlineValue">
+        <div class="example-inline">
+          <span class="example-name">{{ name }}</span>
+          <code class="example-pill">{{ text }}</code>
+          <span v-if="summary" class="example-summary">{{ summary }}</span>
+          <span v-if="showPrefill" class="example-apply-cluster">
+            <span v-if="applied" class="example-applied" role="status">✓ Applied</span>
+            <button type="button" class="btn-mini example-prefill" @click="apply"
+                    v-tip="'Apply this example'">{{ prefillLabel }}</button>
+          </span>
+        </div>
+        <div v-if="description" class="example-desc" v-html="mdInline(description)"></div>
+      </template>
+      <template v-else>
+        <div class="example-card-head">
+          <span class="example-name">{{ name }}</span>
+          <span v-if="summary" class="example-summary">{{ summary }}</span>
+          <span v-if="showPrefill" class="example-apply-cluster">
+            <span v-if="applied" class="example-applied" role="status">✓ Applied</span>
+            <button type="button" class="btn-mini example-prefill" @click="apply"
+                    v-tip="'Apply this example'">{{ prefillLabel }}</button>
+          </span>
+        </div>
+        <div v-if="description" class="example-desc" v-html="mdInline(description)"></div>
+        <a v-if="externalValue" class="example-ext" :href="externalValue" target="_blank" rel="noopener">{{ externalValue }} ↗</a>
+        <pre v-else-if="text" class="example-json" v-html="html"></pre>
+      </template>
     </div>
   `
 }

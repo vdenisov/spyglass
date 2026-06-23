@@ -21,7 +21,8 @@ function controlFor(schema) {
   if (t === 'boolean') return { control: 'boolean' }
   if (t === 'array') {
     const items = schema.items || {}
-    return { control: 'array', itemEnum: Array.isArray(items.enum) ? items.enum : null }
+    const itemKind = Array.isArray(items.type) ? items.type.filter(x => x !== 'null')[0] : items.type
+    return { control: 'array', itemEnum: Array.isArray(items.enum) ? items.enum : null, itemKind: itemKind || null }
   }
   return { control: 'text', placeholder: t || 'string' }
 }
@@ -716,7 +717,7 @@ export default {
             <div v-for="g in paramExampleGroups" :key="g.in + '-' + g.name" class="schema-block">
               <div class="example-group-head"><span class="stree-name">{{ g.name }}</span> <span class="stree-type">{{ g.in }}</span></div>
               <ExampleCard v-for="e in g.examples" :key="e.name" v-bind="e"
-                :can-prefill="true" prefill-label="Use value" @prefill="prefillParam(g, $event)" />
+                :can-prefill="true" :compact="true" prefill-label="Apply" @prefill="prefillParam(g, $event)" />
             </div>
           </template>
 

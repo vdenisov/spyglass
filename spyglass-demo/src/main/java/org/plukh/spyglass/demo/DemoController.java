@@ -220,10 +220,21 @@ public class DemoController {
     @PostMapping("/examples")
     public ExamplePayload echoExample(
             @Parameter(description = "A filter expression.", examples = {
-                    @ExampleObject(name = "by-name", summary = "Match by name", value = "acme"),
+                    @ExampleObject(name = "by-name", summary = "Match by name",
+                            description = "Matches records whose name contains the given substring. "
+                                    + "The comparison is case-insensitive and ignores surrounding whitespace.",
+                            value = "acme"),
                     @ExampleObject(name = "by-id", summary = "Match by id", value = "42")
             })
             @RequestParam(value = "filter", required = false) String filter,
+            @Parameter(description = "Tags to filter by (repeatable).", examples = {
+                    @ExampleObject(name = "single", summary = "One tag", value = "[\"featured\"]"),
+                    @ExampleObject(name = "multiple", summary = "Several tags",
+                            description = "Records must carry **all** of the listed tags. "
+                                    + "Order is not significant and duplicates are ignored.",
+                            value = "[\"featured\", \"in-stock\", \"on-sale\"]")
+            })
+            @RequestParam(value = "tags", required = false) List<String> tags,
             @Parameter(description = "Maximum results.", example = "20")
             @RequestParam(value = "limit", required = false) Integer limit,
             @RequestBody ExamplePayload payload) {
