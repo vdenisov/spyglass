@@ -69,16 +69,15 @@ class SampleExtensionAE extends SpyglassDemoSpecBase {
     }
 
     def "captures a representative screenshot for the docs"() {
-        given: 'a viewport sized to keep the content pane tight (little right-hand whitespace)'
-        page.setViewportSize(1080, 900)
+        given: 'a landscape viewport — tight on the right, short enough to read as a README banner'
+        page.setViewportSize(1080, 720)
 
-        when: 'a schema-rich operation is open (query params, a body form and named examples)'
-        open('POST-/apidocs-demo/examples')
+        when: 'a form-forward operation is open (a oneOf/discriminator body, no query params)'
+        open('POST-/apidocs-demo/shapes')
         page.waitForSelector('.op-panel .body-section')
 
-        then: 'a full-page screenshot is written to the build dir for docs/assets'
+        then: 'a viewport (not full-page) screenshot is written to the build dir for docs/assets'
         page.screenshot(new Page.ScreenshotOptions()
-                .setPath(Paths.get('target', 'screenshots', 'explorer.png'))
-                .setFullPage(true))
+                .setPath(Paths.get('target', 'screenshots', 'explorer.png')))
     }
 }
