@@ -447,6 +447,102 @@ class FormGenerationAE extends SpyglassSpecBase {
         page.locator('.warnings').count() == 0
     }
 
+    // ---- object with both fixed properties and additionalProperties ----------
+
+    def "renders fixed properties alongside an additionalProperties map editor"() {
+        given:
+        open('POST-/config')
+
+        expect: 'the declared fields render'
+        field('id').count() == 1
+        field('label').count() == 1
+
+        and: 'a free-form map editor sits alongside them for the extra keys'
+        field('additional properties').getAttribute('class').contains('kind-map')
+        mapEntries('additional properties').count() == 0
+    }
+
+    def "sends declared fields and extra free-form keys together"() {
+        given:
+        open('POST-/config')
+        textInput('id').fill('cfg-1')
+
+        when: 'an extra key is added via the additionalProperties editor'
+        mapAdd('additional properties')
+        mapEntries('additional properties').first().locator('.map-key').fill('region')
+        mapEntries('additional properties').first().locator('.map-value input').fill('eu')
+
+        then: 'both the declared id and the extra key appear in the body'
+        def b = body(captureSend('**/config'))
+        b.id == 'cfg-1'
+        b.region == 'eu'
+    }
+
+    def "a declared property wins a key collision with the additionalProperties map"() {
+        given:
+        open('POST-/config')
+        textInput('id').fill('cfg-1')
+
+        when: 'an extra entry reuses a declared field name'
+        mapAdd('additional properties')
+        mapEntries('additional properties').first().locator('.map-key').fill('id')
+        mapEntries('additional properties').first().locator('.map-value input').fill('SHOULD-NOT-WIN')
+
+        then: 'the declared field value is kept'
+        body(captureSend('**/config')).id == 'cfg-1'
+    }
+
+    def "documents the additionalProperties capability in the Schema tab"() {
+        given:
+        open('POST-/config')
+
+        when:
+        page.locator('.op-tabs button', new Page.LocatorOptions().setHasText('Schema')).click()
+
+        then: 'the type tree lists the declared fields and notes the free-form map'
+        page.locator('.schema-doc .stree-name').allTextContents().containsAll(['id', 'label', 'additional properties'])
+        assertThat(page.locator('.schema-doc .stree-additional .stree-type')).containsText('map<string>')
+    }
+
+    // ---- deep polymorphic allOf (a base that itself extends a common root) ----
+
+    def "inherits a polymorphic base's ancestor (allOf root) scalars into each variant branch"() {
+        given:
+        open('POST-/conveyances')
+
+        expect: 'the base renders as a discriminated variant selector'
+        page.locator('.form-body .variant-select option').allTextContents() == ['car', 'bike']
+
+        and: 'the car branch carries the root vin, the base mode (prefilled), and its own doors'
+        field('vin').count() == 1
+        field('doors').count() == 1
+        textInput('mode').inputValue() == 'car'
+
+        when: 'switching to the bike branch'
+        page.locator('.form-body .variant-select select').selectOption(new SelectOption().setIndex(1))
+
+        then: 'the inherited root vin and base mode persist; only the branch-specific field swaps'
+        field('vin').count() == 1
+        field('gears').count() == 1
+        field('doors').count() == 0
+        textInput('mode').inputValue() == 'bike'
+    }
+
+    def "sends the deep-inherited scalars in the selected branch body"() {
+        given:
+        open('POST-/conveyances')
+        textInput('vin').fill('VIN123')
+        numberInput('doors').fill('4')
+
+        when:
+        def b = body(captureSend('**/conveyances'))
+
+        then: 'the root vin, discriminator mode, and branch-specific doors all serialize'
+        b.vin == 'VIN123'
+        b.mode == 'car'
+        b.doors == 4
+    }
+
     // ---- helpers -------------------------------------------------------------
 
     /** The include checkbox of a multi-branch anyOf branch addressed by its label. */

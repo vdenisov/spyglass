@@ -330,6 +330,30 @@
           }
         }
       }
+    },
+    "/config": {
+      "post": {
+        "tags": ["Composed"],
+        "summary": "Save a config envelope (fixed properties + additionalProperties)",
+        "requestBody": {
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ConfigEnvelope" } }
+          }
+        },
+        "responses": { "200": { "description": "ok" } }
+      }
+    },
+    "/conveyances": {
+      "post": {
+        "tags": ["Composed"],
+        "summary": "Register a conveyance (2-level allOf + discriminator)",
+        "requestBody": {
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/Conveyance" } }
+          }
+        },
+        "responses": { "200": { "description": "ok" } }
+      }
     }
   },
   "components": {
@@ -493,6 +517,62 @@
         "anyOf": [
           { "type": "string" },
           { "type": "integer" }
+        ]
+      },
+      "ConfigEnvelope": {
+        "type": "object",
+        "required": ["id"],
+        "description": "A typed object that also permits extra free-form string keys.",
+        "properties": {
+          "id": { "type": "string", "description": "The config id." },
+          "label": { "type": "string", "description": "An optional display label." }
+        },
+        "additionalProperties": { "type": "string" }
+      },
+      "Vehicle": {
+        "type": "object",
+        "required": ["vin"],
+        "properties": {
+          "vin": { "type": "string", "description": "Vehicle identification number (from the common root)." }
+        }
+      },
+      "Conveyance": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Vehicle" }
+        ],
+        "type": "object",
+        "properties": {
+          "mode": { "type": "string" }
+        },
+        "oneOf": [
+          { "$ref": "#/components/schemas/CarV" },
+          { "$ref": "#/components/schemas/BikeV" }
+        ],
+        "discriminator": {
+          "propertyName": "mode",
+          "mapping": {
+            "car": "#/components/schemas/CarV",
+            "bike": "#/components/schemas/BikeV"
+          }
+        }
+      },
+      "CarV": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Conveyance" },
+          {
+            "type": "object",
+            "required": ["doors"],
+            "properties": { "doors": { "type": "integer", "description": "Number of doors." } }
+          }
+        ]
+      },
+      "BikeV": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Conveyance" },
+          {
+            "type": "object",
+            "properties": { "gears": { "type": "integer", "description": "Number of gears." } }
+          }
         ]
       }
     }

@@ -86,8 +86,13 @@ function mergeAllOf(schema, seen) {
     // base's composition — resolve it one level and pull in only its shared scalar properties.
     if (d.cyclic) {
       const base = (part && part.$ref) ? (resolveRef(part.$ref) || {}) : {}
-      if (base.properties) Object.assign(merged.properties, base.properties)
-      if (base.required) merged.required.push(...base.required)
+      // The base may itself be an allOf composition (it extends a common root); merge that so the
+      // subtype inherits the root's scalars too, not just the base's own properties. `seen` already
+      // carries the cyclic ref, so this resolves one more level without re-expanding into a loop.
+      const baseMerged = Array.isArray(base.allOf) ? mergeAllOf(base, d.seen) : base
+      const bp = baseMerged.__unsupported ? base : baseMerged
+      if (bp.properties) Object.assign(merged.properties, bp.properties)
+      if (bp.required) merged.required.push(...bp.required)
       continue
     }
     if (Array.isArray(p.allOf)) {
@@ -109,6 +114,13 @@ function mergeAllOf(schema, seen) {
     if (p.properties) Object.assign(merged.properties, p.properties)
     if (p.required) merged.required.push(...p.required)
   }
+  // Carry a top-level oneOf/anyOf/discriminator through the merge so a polymorphic base that ALSO
+  // extends a common root (allOf) still renders its variant selector — the merged properties then act
+  // as the shared base each branch inherits via the cyclic-allOf recovery above. (No effect on a plain
+  // allOf with no polymorphism keyword.)
+  if (schema.oneOf) merged.oneOf = schema.oneOf
+  if (schema.anyOf) merged.anyOf = schema.anyOf
+  if (schema.discriminator) merged.discriminator = schema.discriminator
   return merged
 }
 
@@ -178,7 +190,15 @@ export function makeNode(schema, required = false, seen = new Set()) {
       required: req.has(key),
       node: makeNode(propSchema, req.has(key), d.seen)
     }))
-    return reactive({ kind: 'object', schema: s, required, include: required, fields, description: s.description })
+    const node = reactive({ kind: 'object', schema: s, required, include: required, fields, description: s.description })
+    // A schema with fixed properties AND additionalProperties (a typed object that also permits extra
+    // free-form keys) gets a map sub-editor alongside the declared fields. (The pure free-form map —
+    // no fixed properties — is the `kind: 'map'` branch above; this is the both-at-once case.)
+    if (ap !== undefined && ap !== false) {
+      const valueSchema = (ap === true || typeof ap !== 'object') ? { type: 'string' } : ap
+      node.additional = reactive({ kind: 'map', schema: s, required: false, valueSchema, valueSeen: d.seen, entries: [] })
+    }
+    return node
   }
 
   if (type === 'array' || (!type && s.items)) {
@@ -378,6 +398,15 @@ export function serializeNode(node) {
         const v = serializeNode(f.node)
         if (v !== OMIT) obj[f.key] = v
       }
+      // Extra free-form keys (additionalProperties) merge in after the declared fields; a declared
+      // field always wins a key collision, so the map can't clobber a documented property.
+      if (node.additional) {
+        for (const e of node.additional.entries) {
+          if (!e.key || (e.key in obj)) continue
+          const v = serializeNode(e.node)
+          if (v !== OMIT) obj[e.key] = v
+        }
+      }
       return obj
     }
     case 'array': {
@@ -449,6 +478,18 @@ export function importValue(node, value) {
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         node.include = true
         for (const f of node.fields) if (f.key in value) importValue(f.node, value[f.key])
+        // Any keys the schema doesn't declare go into the additionalProperties map editor (when the
+        // schema permits them); without one they're simply dropped from the form view.
+        if (node.additional) {
+          const known = new Set(node.fields.map(f => f.key))
+          node.additional.entries = []
+          for (const [k, val] of Object.entries(value)) {
+            if (known.has(k)) continue
+            const child = makeNode(node.additional.valueSchema, true, node.additional.valueSeen)
+            importValue(child, val)
+            node.additional.entries.push({ _key: nextId(), key: k, node: child })
+          }
+        }
       }
       break
     case 'array':
@@ -545,6 +586,7 @@ export function collectBodyWarnings(node, path = '$') {
     case 'object':
       if (!node.required && !node.include) break
       for (const f of node.fields) out.push(...collectBodyWarnings(f.node, `${path}.${f.key}`))
+      if (node.additional) node.additional.entries.forEach(e => { if (e.key) out.push(...collectBodyWarnings(e.node, `${path}.${e.key}`)) })
       break
     case 'array':
       if (!node.primitive) node.items.forEach((it, i) => out.push(...collectBodyWarnings(it, `${path}[${i}]`)))
@@ -747,7 +789,13 @@ export function schemaTree(schema, seen = new Set()) {
   if (type === 'object' || (!type && s.properties)) {
     const req = new Set(s.required || [])
     const fields = Object.entries(s.properties || {}).map(([k, ps]) => ({ name: k, required: req.has(k), node: schemaTree(ps, d.seen) }))
-    return { typeLabel: 'object', description, deprecated, fields }
+    const result = { typeLabel: 'object', description, deprecated, fields }
+    // Document that extra free-form keys are allowed (fixed properties + additionalProperties).
+    if (ap !== undefined && ap !== false) {
+      const v = schemaTree((ap === true || typeof ap !== 'object') ? { type: 'string' } : ap, d.seen)
+      result.additionalType = `map<${v.typeLabel}>`
+    }
+    return result
   }
   if (type === 'array' || (!type && s.items)) {
     const it = schemaTree(s.items || {}, d.seen)

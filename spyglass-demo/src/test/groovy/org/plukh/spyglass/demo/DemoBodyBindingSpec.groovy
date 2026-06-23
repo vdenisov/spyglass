@@ -12,9 +12,12 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
  * Boots the demo and POSTs to its JSON-body endpoints, proving the request bodies actually bind.
  *
  * <p>The Playwright {@code *AE} specs intercept the outgoing request with {@code page.route}, so they
- * never exercise server-side deserialization — this spec closes that gap. In particular the immutable
- * Lombok {@code @Value} body types (including the discriminated {@code /shapes} variants) carry no
- * default constructor, so Jackson can only construct them through the {@code @Jacksonized} builder.
+ * never exercise server-side deserialization — this spec closes that gap. The immutable Lombok
+ * {@code @Value} body types carry no default constructor; Jackson binds them through their public
+ * canonical/all-args constructor (the demo compiles with {@code -parameters}). The discriminated
+ * {@code /shapes} and {@code /conveyances} variants bind via their {@code @JsonTypeInfo} discriminator,
+ * and {@code /settings} collects unknown keys through {@code @JsonAnySetter}. Runs on both build legs
+ * (Jackson 2 and 3).
  */
 @ContextConfiguration
 @SpringBootTest(
@@ -64,6 +67,35 @@ class DemoBodyBindingSpec extends Specification {
         then:
         res.code == 200
         json.parseText(res.text).value.text == 'hi'
+    }
+
+    def "POST /apidocs-demo/settings binds declared fields and extra free-form keys"() {
+        when:
+        def res = post('/apidocs-demo/settings', '{"id":"cfg-1","label":"Prod","region":"eu"}')
+
+        then:
+        res.code == 200
+        def echoed = json.parseText(res.text)
+        echoed.id == 'cfg-1'
+        echoed.label == 'Prod'
+        echoed.region == 'eu'
+    }
+
+    def "POST /apidocs-demo/conveyances binds the deep polymorphic #mode body incl. the inherited root vin"() {
+        when:
+        def res = post('/apidocs-demo/conveyances', body)
+
+        then:
+        res.code == 200
+        def echoed = json.parseText(res.text)
+        echoed.mode == mode
+        echoed.vin == 'VIN-1'
+        echoed[field] == value
+
+        where:
+        mode   | body                                      || field   | value
+        'car'  | '{"mode":"car","vin":"VIN-1","doors":4}'  || 'doors' | 4
+        'bike' | '{"mode":"bike","vin":"VIN-1","gears":7}' || 'gears' | 7
     }
 
     // ---- helpers -------------------------------------------------------------

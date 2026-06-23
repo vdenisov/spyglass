@@ -101,10 +101,12 @@ export default {
     // satisfy it — e.g. an image/binary download would 406 with application/json. This is a
     // per-operation override (written to `accept`, not `savedAccept`), so a previous operation's
     // narrowing never sticks and the user's global preference is preserved untouched.
+    // immediate, so a deep-linked/first-selected operation that can't satisfy the saved Accept (e.g. an
+    // image-only download vs application/json) is narrowed on load too, not only on a later switch.
     watch(selected, (op) => {
       const produced = successProduced(op)
       accept.value = (produced.length && !acceptSatisfiable(savedAccept.value, produced)) ? produced[0] : savedAccept.value
-    })
+    }, { immediate: true })
     const addHeader = () => headers.value.push(headerRow({ key: '', value: '' }))
     const removeHeader = (i) => headers.value.splice(i, 1)
 

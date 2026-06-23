@@ -35,7 +35,9 @@ export default {
     // Open via the caret shows everything; typing narrows by case-insensitive substring (falling
     // back to the full list when nothing matches, so the dropdown never goes empty mid-type).
     const filtered = computed(() => {
-      const t = (props.modelValue || '').toLowerCase()
+      // modelValue may be a Number (numeric fields bind it); coerce before string ops so .toLowerCase()
+      // can't throw on a non-zero number.
+      const t = String(props.modelValue ?? '').toLowerCase()
       if (showAll.value || !t) return props.options
       const f = props.options.filter(o => String(o).toLowerCase().includes(t))
       return f.length ? f : props.options

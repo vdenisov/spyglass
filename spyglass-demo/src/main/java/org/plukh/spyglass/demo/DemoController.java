@@ -1,5 +1,7 @@
 package org.plukh.spyglass.demo;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
@@ -37,7 +39,9 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Opt-in demo/showcase for the explorer, registered only when {@code apidocs.demo.enabled=true}
@@ -89,6 +93,25 @@ public class DemoController {
     @PostMapping("/payloads")
     public PayloadRequest createPayload(@RequestBody PayloadRequest request) {
         return request;
+    }
+
+    @Operation(
+            summary = "Save settings (fixed properties + additionalProperties)",
+            description = "Demo — a typed object that also accepts arbitrary extra string entries. The form shows the "
+                    + "declared fields **and** an additional-properties map editor; both are sent and echoed back.")
+    @PostMapping("/settings")
+    public Settings saveSettings(@RequestBody Settings settings) {
+        return settings;
+    }
+
+    @Operation(
+            summary = "Register a conveyance (deep allOf + discriminator)",
+            description = "Demo — a discriminated `oneOf` whose base **also** extends a common `Vehicle` root via "
+                    + "`allOf`. Each branch's form inherits the root's `vin` field, not just the base's own "
+                    + "properties — pick car/bike and the inherited fields appear alongside the branch-specific ones.")
+    @PostMapping("/conveyances")
+    public Conveyance registerConveyance(@RequestBody Conveyance conveyance) {
+        return conveyance;
     }
 
     @Operation(
@@ -446,6 +469,123 @@ public class DemoController {
 
         @Schema(description = "A numeric amount.")
         Integer amount;
+    }
+
+    /**
+     * Demo — a typed object that also permits arbitrary extra string keys (fixed properties +
+     * additionalProperties). A plain mutable bean (not {@code @Value}) so Jackson's {@code @JsonAnySetter}
+     * can collect the unknown keys and {@code @JsonAnyGetter} echo them back; that pairing is also what
+     * makes springdoc emit {@code properties} alongside {@code additionalProperties} for this schema.
+     */
+    @Schema(description = "A settings envelope — fixed fields plus arbitrary extra string entries.",
+            additionalProperties = Schema.AdditionalPropertiesValue.TRUE)
+    public static class Settings {
+
+        @Schema(description = "The settings profile id.", requiredMode = Schema.RequiredMode.REQUIRED)
+        private String id;
+
+        @Schema(description = "An optional display label.")
+        private String label;
+
+        private final Map<String, String> extra = new LinkedHashMap<>();
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+
+        public void setLabel(String label) {
+            this.label = label;
+        }
+
+        // Hidden from the schema: Jackson flattens these entries to top-level keys at runtime (so the
+        // echo round-trips), but in the document they're represented by the type-level additionalProperties
+        // above, not as a nested "extra" property.
+        @JsonAnyGetter
+        @Schema(hidden = true)
+        public Map<String, String> getExtra() {
+            return extra;
+        }
+
+        @JsonAnySetter
+        public void putExtra(String key, String value) {
+            extra.put(key, value);
+        }
+    }
+
+    /**
+     * Demo — the common root of the {@link Conveyance} hierarchy. {@code Conveyance} extends it, so the
+     * generated base schema carries an {@code allOf} reference to this root; the explorer's form lifts
+     * the root's {@code vin} into every concrete branch (see {@link #registerConveyance}).
+     */
+    @Schema(description = "The common vehicle root.")
+    public interface Vehicle {
+
+        @Schema(description = "Vehicle identification number (from the common root).", requiredMode = Schema.RequiredMode.REQUIRED)
+        String getVin();
+    }
+
+    /**
+     * Demo — a discriminated polymorphic body whose base also extends the {@link Vehicle} root. The
+     * springdoc {@code @Schema} emits the {@code oneOf} + {@code discriminator} (the variant selector)
+     * and the {@code allOf} to {@code Vehicle} (the inherited root field) on the same base schema.
+     */
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "mode", visible = true)
+    @JsonSubTypes({
+            @JsonSubTypes.Type(value = CarV.class, name = "car"),
+            @JsonSubTypes.Type(value = BikeV.class, name = "bike")
+    })
+    @Schema(
+            description = "A conveyance — a discriminated oneOf of car/bike that also extends the Vehicle root.",
+            allOf = {Vehicle.class},
+            discriminatorProperty = "mode",
+            oneOf = {CarV.class, BikeV.class},
+            discriminatorMapping = {
+                    @DiscriminatorMapping(value = "car", schema = CarV.class),
+                    @DiscriminatorMapping(value = "bike", schema = BikeV.class)
+            })
+    public interface Conveyance extends Vehicle {
+
+        String getMode();
+    }
+
+    /**
+     * Demo — the "car" conveyance branch.
+     */
+    @Value
+    public static class CarV implements Conveyance {
+
+        @Schema(description = "Vehicle identification number (from the common root).")
+        String vin;
+
+        @Schema(description = "Discriminator value — always \"car\".")
+        String mode;
+
+        @Schema(description = "Number of doors.")
+        Integer doors;
+    }
+
+    /**
+     * Demo — the "bike" conveyance branch.
+     */
+    @Value
+    public static class BikeV implements Conveyance {
+
+        @Schema(description = "Vehicle identification number (from the common root).")
+        String vin;
+
+        @Schema(description = "Discriminator value — always \"bike\".")
+        String mode;
+
+        @Schema(description = "Number of gears.")
+        Integer gears;
     }
 
     /**

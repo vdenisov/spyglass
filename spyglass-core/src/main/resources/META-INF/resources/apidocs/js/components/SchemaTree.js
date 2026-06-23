@@ -38,6 +38,10 @@ export default {
       </div>
       <div v-if="hasFields" class="stree-children" :class="{ root: !name }">
         <SchemaTree v-for="f in node.fields" :key="f.name" :node="f.node" :name="f.name" :required="f.required" />
+        <div v-if="node.additionalType" class="stree-row stree-additional">
+          <span class="stree-name">additional properties</span>
+          <span class="stree-type">{{ node.additionalType }}</span>
+        </div>
       </div>
       <div v-else-if="!name && node.typeLabel === 'object'" class="hint">(no documented properties)</div>
     </div>
