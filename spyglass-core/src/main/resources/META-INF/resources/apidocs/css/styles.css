@@ -152,17 +152,19 @@ body {
 }
 .filter-clear:hover { color: var(--text); background: var(--accent-weak); }
 .op-list { overflow-y: auto; overflow-x: auto; padding: 0 8px 16px; flex: 1; }
-/* Always-visible keyboard cheat-sheet, pinned below the list. */
-.sidebar-hint {
+/* Explorer (Spyglass) branding, pinned at the very bottom of the rail — distinct from the API title
+   at the top (.brand), which is the spec's info.title. */
+.sidebar-foot {
   flex: 0 0 auto; border-top: 1px solid var(--border);
   padding: 8px 12px; font-size: 11px; color: var(--muted);
-  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  display: flex; flex-direction: column; gap: 2px;
 }
-.sidebar-hint kbd {
-  font-family: var(--mono); font-size: 10px; line-height: 1.4;
-  border: 1px solid var(--border); border-radius: 4px;
-  padding: 0 4px; background: var(--bg); color: var(--text);
-}
+.foot-brand { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.foot-name { font-weight: 600; color: var(--text); }
+.foot-meta { display: flex; align-items: baseline; gap: 6px; }
+.foot-version { font-family: var(--mono); }
+.foot-link { color: var(--accent); text-decoration: none; }
+.foot-link:hover { text-decoration: underline; }
 .tag-group { margin-top: 12px; min-width: 100%; width: max-content; }
 .tag-name {
   font-size: 11px; text-transform: uppercase; letter-spacing: .04em;

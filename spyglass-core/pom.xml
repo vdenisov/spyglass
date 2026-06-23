@@ -20,6 +20,28 @@
     </description>
 
     <build>
+        <!--
+            Inject the project version into js/version.js via resource filtering. Filtering is scoped to
+            that one file (the @project.version@ token); everything else — notably the vendored Vue /
+            marked / CodeMirror bundles — is copied verbatim, so no asset is rewritten or slowed by token
+            scanning.
+        -->
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>META-INF/resources/apidocs/js/version.js</exclude>
+                </excludes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>META-INF/resources/apidocs/js/version.js</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <!--
                 Ship the licence and the complete third-party notices inside the jar (under META-INF/)

@@ -1,4 +1,5 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { VERSION } from '../version.js'
 
 // Lists operations grouped by tag with a live filter; emits `select` when one is chosen.
 // Keyboard model (consistent whether you arrive by typing or by clicking):
@@ -113,11 +114,12 @@ export default {
       commitNow(op)
     }
 
-    // Clicking sidebar chrome that isn't the filter or a row (the list's empty space, the brand, the
-    // hint footer) would otherwise drop focus to <body> and stop ↑/↓ working. Keep the list navigable
-    // by moving focus to the active row instead.
+    // Clicking sidebar chrome that isn't the filter, a row, or a link (the list's empty space, the
+    // brand, the footer) would otherwise drop focus to <body> and stop ↑/↓ working. Keep the list
+    // navigable by moving focus to the active row instead — but never hijack a real link (the footer's
+    // GitHub link must navigate/focus normally).
     const onSidebarMousedown = (e) => {
-      if (e.target.closest('.op-link, .filter-wrap') || !flatOps.value.length) return
+      if (e.target.closest('.op-link, .filter-wrap, a[href]') || !flatOps.value.length) return
       e.preventDefault()
       focusOp(activeIndex.value >= 0 ? activeIndex.value : 0)
     }
@@ -160,9 +162,13 @@ export default {
     onMounted(() => document.addEventListener('keydown', onGlobalKeydown))
     onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
 
+    // Spyglass's own version, build-injected (version.js). In an unfiltered checkout the literal token
+    // survives — hide the version line rather than render it raw.
+    const version = computed(() => VERSION.startsWith('@') ? '' : VERSION)
+
     return {
       filter, filterInput, rootEl, groups, kbActive, isActiveIndex, isHighlighted, opLabel,
-      onFilterKeydown, onOpKeydown, choose, clearFilter, onFocusin, onFocusout, onSidebarMousedown
+      onFilterKeydown, onOpKeydown, choose, clearFilter, onFocusin, onFocusout, onSidebarMousedown, version
     }
   },
   template: `
@@ -189,8 +195,13 @@ export default {
         </div>
         <div v-if="!groups.length" class="hint">No operations match.</div>
       </div>
-      <div class="sidebar-hint" aria-hidden="true">
-        <kbd>/</kbd> filter · <kbd>↑</kbd><kbd>↓</kbd> navigate
+      <div class="sidebar-foot">
+        <span class="foot-brand"><span class="foot-name">Spyglass</span> · OpenAPI Explorer</span>
+        <span class="foot-meta">
+          <span v-if="version" class="foot-version">v{{ version }}</span>
+          <a class="foot-link" href="https://github.com/vdenisov/spyglass" target="_blank" rel="noopener"
+             v-tip="'github.com/vdenisov/spyglass'">GitHub ↗</a>
+        </span>
       </div>
     </aside>
   `
