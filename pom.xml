@@ -4,7 +4,7 @@
 
     <groupId>org.plukh.spyglass</groupId>
     <artifactId>spyglass-parent</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Spyglass (parent)</name>
@@ -72,6 +72,8 @@
         <maven-failsafe-plugin.version>3.5.0</maven-failsafe-plugin.version>
         <maven-source-plugin.version>3.2.1</maven-source-plugin.version>
         <maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
+        <!-- Release-only: syncs the dependency version shown in README/docs (see the release profile). -->
+        <maven-antrun-plugin.version>3.1.0</maven-antrun-plugin.version>
         <!-- CI-only: used by the workflow to run the Playwright browser installer via exec:java. -->
         <exec-maven-plugin.version>3.5.1</exec-maven-plugin.version>
         <!-- Release-only plugins (bound under the "release" profile; never run by a normal build). -->
@@ -84,7 +86,7 @@
             release date when cutting a release; a stale value only affects archive entry timestamps,
             not behaviour.
         -->
-        <project.build.outputTimestamp>2026-06-22T00:00:00Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-06-23T17:14:31Z</project.build.outputTimestamp>
     </properties>
 
     <dependencyManagement>
@@ -275,6 +277,41 @@
             <id>release</id>
             <build>
                 <plugins>
+                    <!--
+                        Keep the dependency version shown in README.md / docs/*.md in lockstep with the
+                        build, so a release can't ship docs that still quote the previous (or SNAPSHOT)
+                        coordinates. Runs only on the aggregator (inherited=false) at validate, and only
+                        under -Prelease; it rewrites the version inside every org.plukh.spyglass
+                        dependency snippet to ${project.version}. Bump the project version, run the
+                        release build, and the docs follow — no manual edit.
+                    -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>${maven-antrun-plugin.version}</version>
+                        <inherited>false</inherited>
+                        <executions>
+                            <execution>
+                                <id>sync-doc-versions</id>
+                                <phase>validate</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <replaceregexp flags="gs" byline="false">
+                                            <regexp pattern="(&lt;artifactId&gt;spyglass-[a-z-]+&lt;/artifactId&gt;\s*&lt;version&gt;)[^&lt;]+(&lt;/version&gt;)"/>
+                                            <substitution expression="\1${project.version}\2"/>
+                                            <fileset dir="${project.basedir}">
+                                                <include name="README.md"/>
+                                                <include name="docs/*.md"/>
+                                            </fileset>
+                                        </replaceregexp>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                     <!-- Activates the attach-sources execution defined in pluginManagement. -->
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>

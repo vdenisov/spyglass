@@ -6,7 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Import;
 
 /**
- * Runnable, organization-neutral showcase host for the explorer. Activating Spyglass is a single
+ * Runnable, consumer-neutral showcase host for the explorer. Activating Spyglass is a single
  * {@code @Import(SpyglassConfiguration.class)}; springdoc generates {@code /v3/api-docs} from the
  * component-scanned {@link DemoController} (wired by {@link DemoEndpointsConfiguration} when
  * {@code apidocs.demo.enabled=true}, which this app sets), and the explorer renders it at

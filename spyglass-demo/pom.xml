@@ -5,14 +5,14 @@
     <parent>
         <groupId>org.plukh.spyglass</groupId>
         <artifactId>spyglass-parent</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>1.0.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>spyglass-demo</artifactId>
 
     <name>Spyglass Demo</name>
     <description>
-        A runnable, organization-neutral Spring Boot showcase for the explorer: a small set of toy
+        A runnable, consumer-neutral Spring Boot showcase for the explorer: a small set of toy
         endpoints (oneOf/anyOf/discriminator bodies, named examples, multipart/urlencoded forms, binary
         and image responses, a deprecated operation) that exercise the front-end features a real
         service's spec may not contain. springdoc generates /v3/api-docs from these endpoints and
@@ -59,8 +59,20 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- Test: Spock specs guarding the demo's opt-in contract and that its request bodies actually
-             bind (the latter boots the app on a random port; no Playwright needed here). -->
+        <!-- Test: Spock specs guard the demo's opt-in contract and that its request bodies bind; the
+             SampleExtensionAE browser spec drives the explorer (with the bundled sample extension) via
+             Playwright. The shared spyglass-spring-test-support harness supplies the browser spec base
+             (and transitively Spock / Playwright); Playwright is also declared explicitly. -->
+        <dependency>
+            <groupId>org.plukh.spyglass</groupId>
+            <artifactId>spyglass-spring-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.spockframework</groupId>
             <artifactId>spock-core</artifactId>
