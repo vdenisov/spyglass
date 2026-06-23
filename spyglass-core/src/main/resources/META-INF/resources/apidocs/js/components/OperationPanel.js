@@ -5,6 +5,7 @@ import { getValues, recordValue, removeValue, paramKey, bodyFieldKey } from '../
 import { loadForm, saveForm, removeForm } from '../opForm.js'
 import { copyText } from '../clipboard.js'
 import { statusKind } from '../format.js'
+import { useFlash } from '../useFlash.js'
 import ParamInputs from './ParamInputs.js'
 import ResponseView from './ResponseView.js'
 
@@ -70,7 +71,7 @@ export default {
     // expose read-only views so the template and shortcut handler are unchanged.
     const response = computed(() => props.execState.response)
     const sending = computed(() => props.execState.sending)
-    const copied = ref(false)
+    const { flag: copied, flash: flashCopied } = useFlash()
     const tab = ref('try')
     const schemaView = ref('schema')
     // True while rebuild() is reseeding the form from a saved snapshot — suppresses the persist watcher
@@ -265,6 +266,10 @@ export default {
 
     // Debounced persistence of same-operation edits, so a reload mid-editing keeps them. Skipped while
     // seeding; the captured opId guards against a switch landing the save under the wrong operation.
+    // `deep: true` re-traverses the body node tree on each edit to observe nested field changes. This
+    // cost is intentionally accepted: it is sub-millisecond for any form a human actually fills, and the
+    // only cheaper alternative (persist on `beforeunload` instead of per-edit) would trade crash-safety
+    // for a win that doesn't matter here — nobody hand-edits a thousand-field body in the visual form.
     watch([paramState, mediaType, useRaw, rawText, bodyNode], () => {
       if (seeding) return
       const opId = props.operation.id
@@ -528,10 +533,7 @@ export default {
     }
 
     const copyToClipboard = async (text) => {
-      if (await copyText(text)) {
-        copied.value = true
-        setTimeout(() => { copied.value = false }, 1500)
-      }
+      if (await copyText(text)) flashCopied()
     }
 
     const sqEscape = (s) => String(s).replace(/'/g, "'\\''")

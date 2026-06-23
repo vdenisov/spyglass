@@ -53,18 +53,32 @@ export function resolveHeaderLink(name, value) {
   return null
 }
 
-// Dynamically imports each extension module in the resolved list and calls its register(api). The
-// list is computed by App.js (operator-supplied entries, else same-origin spec-supplied ones), not
-// read from CONFIG here, so the trust filtering stays in one place. A failing extension is logged and
-// skipped — it must never break the core explorer.
+// Dynamically imports the resolved extension modules and calls each one's register(api). The list is
+// computed by App.js (operator-supplied entries, else same-origin spec-supplied ones), not read from
+// CONFIG here, so the trust filtering stays in one place. Imports run in parallel (the network is the
+// slow part), then register() is called in list order so registration stays deterministic — e.g. the
+// "first non-null header-link resolver wins" precedence. A module that fails to import or whose
+// register() throws is logged and skipped: an extension must never break the core explorer.
 export async function loadExtensions(api, extensions) {
-  for (const url of extensions || []) {
+  const loaded = await Promise.all((extensions || []).map(async (url) => {
     try {
-      const module = await import(url)
-      if (typeof module.register === 'function') await module.register(api)
-      else console.warn('[spyglass] extension has no register(api) export:', url)
+      return { url, module: await import(url) }
     } catch (e) {
       console.error('[spyglass] extension failed to load:', url, e)
+      return null
+    }
+  }))
+  for (const entry of loaded) {
+    if (!entry) continue
+    const { url, module } = entry
+    if (typeof module.register !== 'function') {
+      console.warn('[spyglass] extension has no register(api) export:', url)
+      continue
+    }
+    try {
+      await module.register(api)
+    } catch (e) {
+      console.error('[spyglass] extension failed to register:', url, e)
     }
   }
 }

@@ -190,6 +190,30 @@ public class DemoController {
     }
 
     @Operation(
+            summary = "Return a large JSON response (pretty-print size-limit probe)",
+            description = "Demo — returns a JSON body of roughly `kb` kilobytes (default 2200, just over the "
+                    + "explorer's ~2 MB threshold), so the response view falls back to plain, unformatted text "
+                    + "instead of parsing, pretty-printing and syntax-highlighting a multi-megabyte body.")
+    @ApiResponse(responseCode = "200", description = "A large JSON array, sized to exceed the explorer's pretty-print limit.")
+    @GetMapping(value = "/large", produces = MediaType.APPLICATION_JSON_VALUE)
+    public String large(
+            @Parameter(description = "Approximate response size in kilobytes (clamped to 1–8192; default 2200).")
+            @RequestParam(value = "kb", defaultValue = "2200") int kb) {
+        int target = Math.clamp(kb, 1, 8192) * 1024;
+        // Build valid, multi-line (pretty) JSON by hand so the body carries real newlines: many medium
+        // lines render far more smoothly than one multi-megabyte line once the explorer shows it as text.
+        String filler = "x".repeat(100);
+        StringBuilder sb = new StringBuilder(target + 128);
+        sb.append("{\n  \"note\": \"A large JSON response — it may render unformatted if it exceeds the explorer's pretty-print limit (~2 MB).\",\n  \"items\": [\n");
+        int i = 0;
+        while (sb.length() < target) {
+            sb.append("    \"row-").append(String.format("%07d", i++)).append('-').append(filler).append("\",\n");
+        }
+        sb.append("    \"end\"\n  ]\n}\n");
+        return sb.toString();
+    }
+
+    @Operation(
             summary = "Echo a payload (named examples everywhere)",
             description = "Demo — showcases spec-provided named `examples`: request-body examples (named, "
                     + "described and one external-value), parameter examples (a named map and a singular "

@@ -219,4 +219,15 @@ abstract class ExplorerBrowserSpecBase extends Specification {
                 "//label[contains(concat(' ',normalize-space(@class),' '),' field-row ')]" +
                 "[.//span[contains(concat(' ',normalize-space(@class),' '),' field-label ') and normalize-space(text())='${name}']]")
     }
+
+    /**
+     * The one-per-line textarea of an array-typed parameter, by its exact name. Array params render as a
+     * `.param-array` block (label + `array` tag + textarea), not the `label.field-row` that {@link #param}
+     * matches, so they need their own locator.
+     */
+    protected Locator paramArrayText(String name) {
+        page.locator("xpath=//*[contains(concat(' ',normalize-space(@class),' '),' param-array ')]" +
+                "[.//*[contains(concat(' ',normalize-space(@class),' '),' field-label ') and normalize-space(text())='${name}']]" +
+                "//textarea")
+    }
 }

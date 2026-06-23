@@ -12,6 +12,12 @@
 
 import { OP_FORM_KEY, loadJson, saveJson } from './storage.js'
 
+// Cap on how many per-operation snapshots are kept. The whole map lives in one localStorage value, so
+// without a bound it would grow with every operation ever visited (across sessions) until it hits the
+// ~5 MB quota — after which saveJson silently drops ALL persistence. Re-inserting an entry on save makes
+// the object's key order reflect write-recency, so the oldest (least-recently-saved) entries evict first.
+const MAX_OPERATIONS = 50
+
 function readAll() {
   const all = loadJson(localStorage, OP_FORM_KEY, {})
   return all && typeof all === 'object' ? all : {}
@@ -29,7 +35,10 @@ export function loadForm(opId) {
 
 export function saveForm(opId, snapshot) {
   const all = readAll()
+  delete all[opId]           // drop any prior entry so re-insertion moves this op to newest
   all[opId] = snapshot
+  const ids = Object.keys(all)
+  for (let i = 0; i < ids.length - MAX_OPERATIONS; i++) delete all[ids[i]] // evict oldest past the cap
   writeAll(all)
 }
 

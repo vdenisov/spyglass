@@ -22,8 +22,8 @@ class NavigationAE extends SpyglassSpecBase {
         open()
 
         then:
-        page.locator('.op-link').count() == 15
-        page.locator('.tag-name').allTextContents() == ['Action items', 'Bodies', 'Legacy', 'Lookups', 'Polymorphic', 'Widgets']
+        page.locator('.op-link').count() == 17
+        page.locator('.tag-name').allTextContents() == ['Action items', 'Bodies', 'Composed', 'Legacy', 'Lookups', 'Polymorphic', 'Widgets']
     }
 
     def "filters operations live"() {

@@ -28,7 +28,7 @@ class TryItOutAE extends SpyglassSpecBase {
         given:
         param('id').locator('.control input').fill('42')
         param('verbose').locator('.control select').selectOption('true')
-        param('fields').locator('textarea').fill('a\nb')
+        paramArrayText('fields').fill('a\nb')
         param('X-Trace').locator('.control input').fill('tid')
 
         when:
@@ -387,6 +387,23 @@ class TryItOutAE extends SpyglassSpecBase {
         then:
         download.suggestedFilename().endsWith('.bin')
         download.suggestedFilename().contains('widgets')
+    }
+
+    def "renders an over-limit JSON response unformatted, without the pretty-print toggle"() {
+        given: 'a JSON response just over the ~2 MB pretty-print size limit'
+        def line = '    "' + ('x' * 72) + '",\n'   // ~80 chars per line
+        def big = '{\n  "items": [\n' + (line * 26000) + '    "end"\n  ]\n}'
+        stub('application/json', big)
+
+        when:
+        sendForResponse()
+
+        then: 'it falls back to plain text — the large-response note shows and the pretty toggle is gone'
+        assertThat(page.locator('.resp-toolarge')).isVisible()
+        page.locator('.resp-pretty').count() == 0
+
+        and: 'the body still renders in the viewer'
+        assertThat(page.locator('.response .code-viewer')).isVisible()
     }
 
     // ---- helpers -------------------------------------------------------------

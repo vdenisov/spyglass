@@ -166,6 +166,26 @@ class PersistenceAE extends SpyglassSpecBase {
         !page.evaluate("() => localStorage.getItem('apidocs-op-form') || ''").toString().contains('"ok":true')
     }
 
+    def "caps the per-operation form store, evicting the oldest snapshots"() {
+        given:
+        open('GET-/widgets/{id}')
+
+        expect: 'saving past the cap keeps only the newest snapshots and evicts the oldest'
+        page.evaluate('''async () => {
+            const { saveForm, loadForm } = await import('/apidocs/js/opForm.js')
+            const { OP_FORM_KEY } = await import('/apidocs/js/storage.js')
+            localStorage.removeItem(OP_FORM_KEY)
+            for (let i = 0; i < 55; i++) saveForm('GET /op-' + i, { params: { i: String(i) } })
+            const all = JSON.parse(localStorage.getItem(OP_FORM_KEY))
+            return {
+                capped: Object.keys(all).length === 50,
+                oldestEvicted: loadForm('GET /op-0') === null,
+                firstKept: !!loadForm('GET /op-5'),
+                newestKept: !!loadForm('GET /op-54')
+            }
+        }''') == [capped: true, oldestEvicted: true, firstKept: true, newestKept: true]
+    }
+
     def "an operation's Reset clears its inputs, response and saved form"() {
         given:
         open('GET-/widgets/{id}')

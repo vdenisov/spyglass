@@ -1,6 +1,7 @@
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { mdInline } from '../markdown.js'
 import { highlightJson, escapeHtml } from '../jsonHighlight.js'
+import { useFlash } from '../useFlash.js'
 
 // Renders one OpenAPI example (named or singular) as a readable card on the Schema → Examples tab:
 // its name, summary, markdown description and pretty-printed (syntax-highlighted) value. An example
@@ -40,14 +41,8 @@ export default {
     const inlineValue = computed(() =>
       props.compact && !isJson.value && !props.externalValue && text.value !== '' && !text.value.includes('\n'))
 
-    const applied = ref(false)
-    let timer = null
-    const apply = () => {
-      emit('prefill', props.value)
-      applied.value = true
-      clearTimeout(timer)
-      timer = setTimeout(() => { applied.value = false }, 1500)
-    }
+    const { flag: applied, flash } = useFlash()
+    const apply = () => { emit('prefill', props.value); flash() }
     return { text, html, showPrefill, inlineValue, applied, apply, mdInline }
   },
   template: `
