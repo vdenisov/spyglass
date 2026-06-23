@@ -89,7 +89,8 @@ export default {
           <SchemaField v-for="f in node.fields" :key="f.key" :node="f.node" :label="f.key" :required="f.required"
             :hist-values="rootHist ? rootHist(f.key) : null"
             :hist-forget="rootForget ? (v) => rootForget(f.key, v) : null" />
-          <p v-if="!node.fields.length" class="hint">(no properties)</p>
+          <p v-if="!node.fields.length && !node.additional" class="hint">(no properties)</p>
+          <SchemaField v-if="node.additional" :node="node.additional" label="additional properties" :required="false" />
         </div>
       </template>
 

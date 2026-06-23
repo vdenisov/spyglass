@@ -11,6 +11,7 @@
 // asynchronously, once the spec is in) still renders.
 
 import { reactive } from 'vue'
+import { isSafeHref } from './config.js'
 
 export const registry = reactive({
   // Vue component definitions rendered in the headers editor (where the org's auth UI lives).
@@ -36,14 +37,15 @@ export function registerHeaderLinkResolver(fn) {
   if (typeof fn === 'function') registry.headerLinkResolvers.push(fn)
 }
 
-// Returns the first non-null URL a registered resolver produces for this response header, or null
-// when none applies (the value then renders as plain text). A throwing resolver is skipped, so a
-// faulty extension can never break the response view.
+// Returns the first safe non-null URL a registered resolver produces for this response header, or null
+// when none applies (the value then renders as plain text). An unsafe-scheme URL (javascript:/data:) is
+// skipped like a null, and a throwing resolver is skipped too, so a faulty or hostile extension can
+// never break the response view or inject a script: href.
 export function resolveHeaderLink(name, value) {
   for (const resolve of registry.headerLinkResolvers) {
     try {
       const url = resolve(name, value)
-      if (url) return url
+      if (url && isSafeHref(url)) return url
     } catch (e) {
       console.error('[spyglass] header-link resolver failed:', e)
     }
@@ -51,16 +53,32 @@ export function resolveHeaderLink(name, value) {
   return null
 }
 
-// Dynamically imports each configured extension module and calls its register(api). A failing
-// extension is logged and skipped — it must never break the core explorer.
-export async function loadExtensions(api) {
-  for (const url of api.config.extensions || []) {
+// Dynamically imports the resolved extension modules and calls each one's register(api). The list is
+// computed by App.js (operator-supplied entries, else same-origin spec-supplied ones), not read from
+// CONFIG here, so the trust filtering stays in one place. Imports run in parallel (the network is the
+// slow part), then register() is called in list order so registration stays deterministic — e.g. the
+// "first non-null header-link resolver wins" precedence. A module that fails to import or whose
+// register() throws is logged and skipped: an extension must never break the core explorer.
+export async function loadExtensions(api, extensions) {
+  const loaded = await Promise.all((extensions || []).map(async (url) => {
     try {
-      const module = await import(url)
-      if (typeof module.register === 'function') await module.register(api)
-      else console.warn('[spyglass] extension has no register(api) export:', url)
+      return { url, module: await import(url) }
     } catch (e) {
       console.error('[spyglass] extension failed to load:', url, e)
+      return null
+    }
+  }))
+  for (const entry of loaded) {
+    if (!entry) continue
+    const { url, module } = entry
+    if (typeof module.register !== 'function') {
+      console.warn('[spyglass] extension has no register(api) export:', url)
+      continue
+    }
+    try {
+      await module.register(api)
+    } catch (e) {
+      console.error('[spyglass] extension failed to register:', url, e)
     }
   }
 }

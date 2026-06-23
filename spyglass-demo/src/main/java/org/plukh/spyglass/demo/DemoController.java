@@ -1,5 +1,7 @@
 package org.plukh.spyglass.demo;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
@@ -37,11 +39,13 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Opt-in demo/showcase for the explorer, registered only when {@code apidocs.demo.enabled=true}
- * (see {@link DemoEndpointsConfiguration}) — never bound by default.
+ * Opt-in demo/showcase for the explorer, contributed via {@link DemoEndpointsConfiguration} (gated on
+ * {@code apidocs.demo.enabled=true}) for consumers that don't component-scan this package.
  *
  * <p>It exercises explorer features the host service's real spec may not contain: deprecated-operation
  * and dropped-metadata surfacing (deprecated banner, parameter descriptions + markers, externalDocs
@@ -89,6 +93,25 @@ public class DemoController {
     @PostMapping("/payloads")
     public PayloadRequest createPayload(@RequestBody PayloadRequest request) {
         return request;
+    }
+
+    @Operation(
+            summary = "Save settings (fixed properties + additionalProperties)",
+            description = "Demo — a typed object that also accepts arbitrary extra string entries. The form shows the "
+                    + "declared fields **and** an additional-properties map editor; both are sent and echoed back.")
+    @PostMapping("/settings")
+    public Settings saveSettings(@RequestBody Settings settings) {
+        return settings;
+    }
+
+    @Operation(
+            summary = "Register a conveyance (deep allOf + discriminator)",
+            description = "Demo — a discriminated `oneOf` whose base **also** extends a common `Vehicle` root via "
+                    + "`allOf`. Each branch's form inherits the root's `vin` field, not just the base's own "
+                    + "properties — pick car/bike and the inherited fields appear alongside the branch-specific ones.")
+    @PostMapping("/conveyances")
+    public Conveyance registerConveyance(@RequestBody Conveyance conveyance) {
+        return conveyance;
     }
 
     @Operation(
@@ -144,6 +167,53 @@ public class DemoController {
     }
 
     @Operation(
+            summary = "Respond after a delay (try the Cancel button)",
+            description = "Demo — waits `seconds` (clamped to 0–30, default 5) before responding, so a "
+                    + "long-running request can be started and then cancelled from the explorer's "
+                    + "**Cancel** button while it is in flight. The wait is server-side; cancelling aborts "
+                    + "the browser request — the server still finishes its wait.")
+    @ApiResponse(responseCode = "200", description = "The delayed response, reporting the actual wait.")
+    @GetMapping("/slow")
+    public SlowResponse slow(
+            @Parameter(description = "How long to wait before responding, in seconds (clamped to 0–30).")
+            @RequestParam(value = "seconds", defaultValue = "5") int seconds) {
+        long waitMs = Math.clamp(seconds, 0, 30) * 1000L;
+        try {
+            Thread.sleep(waitMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return SlowResponse.builder()
+                .waitedMs(waitMs)
+                .message("Responded after " + waitMs + " ms.")
+                .build();
+    }
+
+    @Operation(
+            summary = "Return a large JSON response (pretty-print size-limit probe)",
+            description = "Demo — returns a JSON body of roughly `kb` kilobytes (default 2200, just over the "
+                    + "explorer's ~2 MB threshold), so the response view falls back to plain, unformatted text "
+                    + "instead of parsing, pretty-printing and syntax-highlighting a multi-megabyte body.")
+    @ApiResponse(responseCode = "200", description = "A large JSON array, sized to exceed the explorer's pretty-print limit.")
+    @GetMapping(value = "/large", produces = MediaType.APPLICATION_JSON_VALUE)
+    public String large(
+            @Parameter(description = "Approximate response size in kilobytes (clamped to 1–8192; default 2200).")
+            @RequestParam(value = "kb", defaultValue = "2200") int kb) {
+        int target = Math.clamp(kb, 1, 8192) * 1024;
+        // Build valid, multi-line (pretty) JSON by hand so the body carries real newlines: many medium
+        // lines render far more smoothly than one multi-megabyte line once the explorer shows it as text.
+        String filler = "x".repeat(100);
+        StringBuilder sb = new StringBuilder(target + 128);
+        sb.append("{\n  \"note\": \"A large JSON response — it may render unformatted if it exceeds the explorer's pretty-print limit (~2 MB).\",\n  \"items\": [\n");
+        int i = 0;
+        while (sb.length() < target) {
+            sb.append("    \"row-").append(String.format("%07d", i++)).append('-').append(filler).append("\",\n");
+        }
+        sb.append("    \"end\"\n  ]\n}\n");
+        return sb.toString();
+    }
+
+    @Operation(
             summary = "Echo a payload (named examples everywhere)",
             description = "Demo — showcases spec-provided named `examples`: request-body examples (named, "
                     + "described and one external-value), parameter examples (a named map and a singular "
@@ -174,10 +244,21 @@ public class DemoController {
     @PostMapping("/examples")
     public ExamplePayload echoExample(
             @Parameter(description = "A filter expression.", examples = {
-                    @ExampleObject(name = "by-name", summary = "Match by name", value = "acme"),
+                    @ExampleObject(name = "by-name", summary = "Match by name",
+                            description = "Matches records whose name contains the given substring. "
+                                    + "The comparison is case-insensitive and ignores surrounding whitespace.",
+                            value = "acme"),
                     @ExampleObject(name = "by-id", summary = "Match by id", value = "42")
             })
             @RequestParam(value = "filter", required = false) String filter,
+            @Parameter(description = "Tags to filter by (repeatable).", examples = {
+                    @ExampleObject(name = "single", summary = "One tag", value = "[\"featured\"]"),
+                    @ExampleObject(name = "multiple", summary = "Several tags",
+                            description = "Records must carry **all** of the listed tags. "
+                                    + "Order is not significant and duplicates are ignored.",
+                            value = "[\"featured\", \"in-stock\", \"on-sale\"]")
+            })
+            @RequestParam(value = "tags", required = false) List<String> tags,
             @Parameter(description = "Maximum results.", example = "20")
             @RequestParam(value = "limit", required = false) Integer limit,
             @RequestBody ExamplePayload payload) {
@@ -325,7 +406,6 @@ public class DemoController {
      * body of {@code POST /examples}.
      */
     @Value
-    @Builder
     public static class ExamplePayload {
 
         @Schema(description = "The payload name.", example = "widget")
@@ -369,8 +449,9 @@ public class DemoController {
     /**
      * Demo — the "circle" shape branch.
      */
+    // @Value (not @Builder) — Jackson binds it through the public all-args constructor (see -parameters
+    // in the build); these request-body types are only echoed, never built, so no builder is needed.
     @Value
-    @Builder
     public static class Circle implements Shape {
 
         @Schema(description = "Discriminator value — always \"circle\".")
@@ -384,7 +465,6 @@ public class DemoController {
      * Demo — the "square" shape branch.
      */
     @Value
-    @Builder
     public static class Square implements Shape {
 
         @Schema(description = "Discriminator value — always \"square\".")
@@ -397,12 +477,11 @@ public class DemoController {
     /**
      * Demo — a body with a non-discriminated anyOf field (either text or a number wrapper).
      */
-    @Value
-    @Builder
-    public static class PayloadRequest {
-
-        @Schema(description = "Either a text or a number payload.", anyOf = {TextPayload.class, NumberPayload.class})
-        Object value;
+    // A record (not @Value) — a single-field immutable type, where a record binds properties-based on
+    // both Jackson majors; a one-arg constructor would instead be treated as delegating.
+    public record PayloadRequest(
+            @Schema(description = "Either a text or a number payload.", anyOf = {TextPayload.class, NumberPayload.class})
+            Object value) {
     }
 
     /**
@@ -428,11 +507,127 @@ public class DemoController {
     }
 
     /**
+     * Demo — a typed object that also permits arbitrary extra string keys (fixed properties +
+     * additionalProperties). A plain mutable bean (not {@code @Value}) so Jackson's {@code @JsonAnySetter}
+     * can collect the unknown keys and {@code @JsonAnyGetter} echo them back; that pairing is also what
+     * makes springdoc emit {@code properties} alongside {@code additionalProperties} for this schema.
+     */
+    @Schema(description = "A settings envelope — fixed fields plus arbitrary extra string entries.",
+            additionalProperties = Schema.AdditionalPropertiesValue.TRUE)
+    public static class Settings {
+
+        @Schema(description = "The settings profile id.", requiredMode = Schema.RequiredMode.REQUIRED)
+        private String id;
+
+        @Schema(description = "An optional display label.")
+        private String label;
+
+        private final Map<String, String> extra = new LinkedHashMap<>();
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+
+        public void setLabel(String label) {
+            this.label = label;
+        }
+
+        // Hidden from the schema: Jackson flattens these entries to top-level keys at runtime (so the
+        // echo round-trips), but in the document they're represented by the type-level additionalProperties
+        // above, not as a nested "extra" property.
+        @JsonAnyGetter
+        @Schema(hidden = true)
+        public Map<String, String> getExtra() {
+            return extra;
+        }
+
+        @JsonAnySetter
+        public void putExtra(String key, String value) {
+            extra.put(key, value);
+        }
+    }
+
+    /**
+     * Demo — the common root of the {@link Conveyance} hierarchy. {@code Conveyance} extends it, so the
+     * generated base schema carries an {@code allOf} reference to this root; the explorer's form lifts
+     * the root's {@code vin} into every concrete branch (see {@link #registerConveyance}).
+     */
+    @Schema(description = "The common vehicle root.")
+    public interface Vehicle {
+
+        @Schema(description = "Vehicle identification number (from the common root).", requiredMode = Schema.RequiredMode.REQUIRED)
+        String getVin();
+    }
+
+    /**
+     * Demo — a discriminated polymorphic body whose base also extends the {@link Vehicle} root. The
+     * springdoc {@code @Schema} emits the {@code oneOf} + {@code discriminator} (the variant selector)
+     * and the {@code allOf} to {@code Vehicle} (the inherited root field) on the same base schema.
+     */
+    @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "mode", visible = true)
+    @JsonSubTypes({
+            @JsonSubTypes.Type(value = CarV.class, name = "car"),
+            @JsonSubTypes.Type(value = BikeV.class, name = "bike")
+    })
+    @Schema(
+            description = "A conveyance — a discriminated oneOf of car/bike that also extends the Vehicle root.",
+            allOf = {Vehicle.class},
+            discriminatorProperty = "mode",
+            oneOf = {CarV.class, BikeV.class},
+            discriminatorMapping = {
+                    @DiscriminatorMapping(value = "car", schema = CarV.class),
+                    @DiscriminatorMapping(value = "bike", schema = BikeV.class)
+            })
+    public interface Conveyance extends Vehicle {
+
+        String getMode();
+    }
+
+    /**
+     * Demo — the "car" conveyance branch.
+     */
+    @Value
+    public static class CarV implements Conveyance {
+
+        @Schema(description = "Vehicle identification number (from the common root).")
+        String vin;
+
+        @Schema(description = "Discriminator value — always \"car\".")
+        String mode;
+
+        @Schema(description = "Number of doors.")
+        Integer doors;
+    }
+
+    /**
+     * Demo — the "bike" conveyance branch.
+     */
+    @Value
+    public static class BikeV implements Conveyance {
+
+        @Schema(description = "Vehicle identification number (from the common root).")
+        String vin;
+
+        @Schema(description = "Discriminator value — always \"bike\".")
+        String mode;
+
+        @Schema(description = "Number of gears.")
+        Integer gears;
+    }
+
+    /**
      * Demo — a deliberately wide request body (~50 fields of mixed kinds, plus a nested object) used as
      * a performance probe for form rendering and keyboard navigation on a complex operation.
      */
     @Value
-    @Builder
     public static class WideForm {
 
         String name;
@@ -515,7 +710,6 @@ public class DemoController {
      * Demo — the nested object of {@link WideForm}.
      */
     @Value
-    @Builder
     public static class WideAddress {
 
         String line1;
@@ -555,6 +749,20 @@ public class DemoController {
         String outcome;
 
         @Schema(description = "A human-readable message.")
+        String message;
+    }
+
+    /**
+     * Demo — the delayed response of {@code GET /slow}.
+     */
+    @Value
+    @Builder
+    public static class SlowResponse {
+
+        @Schema(description = "How long the server waited before responding, in milliseconds.")
+        long waitedMs;
+
+        @Schema(description = "A human-readable confirmation.")
         String message;
     }
 

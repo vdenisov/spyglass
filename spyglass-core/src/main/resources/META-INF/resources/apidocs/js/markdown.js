@@ -1,6 +1,8 @@
 import { parse, parseInline, setOptions } from 'marked'
 
 // Render spec descriptions (team-authored, same-origin) as markdown via marked.
+// Note: setOptions mutates marked's process-global config — fine here as the explorer is marked's only
+// consumer, but any future vendored user of marked would inherit gfm/breaks.
 setOptions({ gfm: true, breaks: true })
 
 // Block-level (paragraphs, lists) — use in a block container.

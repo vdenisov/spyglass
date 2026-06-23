@@ -1,5 +1,8 @@
 import { ref, computed, useAttrs, onBeforeUnmount } from 'vue'
 
+// Per-instance id seed for the combobox/listbox ARIA wiring (aria-controls / aria-activedescendant).
+let comboboxUid = 0
+
 // A themed, editable combobox: a free-text input plus a styled suggestion list we render ourselves
 // (so it matches the app theme and, unlike a native <datalist>, shows the full list on demand).
 // Clicking the caret opens the complete list; typing filters it. Any extra attributes (type,
@@ -26,11 +29,15 @@ export default {
     const showAll = ref(false)
     const active = ref(-1)
     const disabled = computed(() => attrs.disabled !== undefined && attrs.disabled !== false)
+    const listId = 'combobox-' + (++comboboxUid) + '-list'
+    const optionId = (i) => listId + '-opt-' + i
 
     // Open via the caret shows everything; typing narrows by case-insensitive substring (falling
     // back to the full list when nothing matches, so the dropdown never goes empty mid-type).
     const filtered = computed(() => {
-      const t = (props.modelValue || '').toLowerCase()
+      // modelValue may be a Number (numeric fields bind it); coerce before string ops so .toLowerCase()
+      // can't throw on a non-zero number.
+      const t = String(props.modelValue ?? '').toLowerCase()
       if (showAll.value || !t) return props.options
       const f = props.options.filter(o => String(o).toLowerCase().includes(t))
       return f.length ? f : props.options
@@ -76,15 +83,20 @@ export default {
       }
     }
 
-    return { root, isOpen, filtered, active, attrs, disabled, toggle, onInput, choose, remove, onKeydown, open }
+    return { root, isOpen, filtered, active, attrs, disabled, listId, optionId, toggle, onInput, choose, remove, onKeydown, open }
   },
   template: `
     <div class="combobox" :class="{ 'has-caret': options.length }" ref="root">
       <input class="combobox-input" :value="modelValue" v-bind="attrs" autocomplete="off"
+             :role="options.length ? 'combobox' : null"
+             :aria-autocomplete="options.length ? 'list' : null"
+             :aria-expanded="options.length ? (isOpen ? 'true' : 'false') : null"
+             :aria-controls="options.length && isOpen ? listId : null"
+             :aria-activedescendant="isOpen && active >= 0 ? optionId(active) : null"
              @input="onInput" @focus="open" @keydown="onKeydown" />
       <span v-if="options.length" class="combobox-caret" :class="{ disabled }" aria-hidden="true" @mousedown.prevent="toggle"></span>
-      <ul v-if="isOpen && filtered.length" class="combobox-list" role="listbox">
-        <li v-for="(o, i) in filtered" :key="o" role="option" :class="{ active: i === active }"
+      <ul v-if="isOpen && filtered.length" :id="listId" class="combobox-list" role="listbox">
+        <li v-for="(o, i) in filtered" :key="o" :id="optionId(i)" role="option" :aria-selected="i === active" :class="{ active: i === active }"
             @mousedown.prevent="choose(o)" @mouseenter="active = i">
           <span class="combobox-opt">{{ o }}</span>
           <span v-if="deletable" class="combobox-del" role="button" aria-label="remove suggestion"

@@ -15,8 +15,10 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# Markdown is uncommitted by default: the spec/scratch docs may carry private
-# detail and must stay out of this OSS repo. Markdown that
-# must ship is force-added or un-ignored explicitly (e.g. the README rule below).
-*.md
-!README.md
+# Root-level Markdown is uncommitted by default: the planning/scratch docs at the repo root
+# may carry private detail and must stay out of this OSS repo. The leading slash scopes
+# the ignore to the repo root only, so Markdown in subdirectories (frontend/README.md,
+# future docs/**) is tracked normally — no force-add dance. Shippable root docs are un-ignored
+# explicitly below.
+/*.md
+!/README.md

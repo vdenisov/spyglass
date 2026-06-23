@@ -28,7 +28,7 @@ class TryItOutAE extends SpyglassSpecBase {
         given:
         param('id').locator('.control input').fill('42')
         param('verbose').locator('.control select').selectOption('true')
-        param('fields').locator('textarea').fill('a\nb')
+        paramArrayText('fields').fill('a\nb')
         param('X-Trace').locator('.control input').fill('tid')
 
         when:
@@ -96,6 +96,22 @@ class TryItOutAE extends SpyglassSpecBase {
         cap.headers['accept'] == 'image/png'
     }
 
+    def "lets an in-flight request be cancelled"() {
+        given: 'a route that never responds, so the request stays in flight'
+        page.route('**/widgets/**', ({ Route route -> /* held open: never fulfilled */ } as Consumer<Route>))
+        param('id').locator('.control input').fill('1')
+
+        when: 'the request is sent, then cancelled while it is in flight'
+        page.click('.btn-send')
+        page.waitForSelector('.btn-cancel')
+        page.click('.btn-cancel')
+
+        then: 'the response reports the cancel (not a network error) and Send is usable again'
+        assertThat(page.locator('.response')).containsText('Request cancelled')
+        assertThat(page.locator('.btn-send')).isEnabled()
+        page.locator('.btn-cancel').count() == 0
+    }
+
     def "renders the response status, duration and body"() {
         given:
         param('id').locator('.control input').fill('1')
@@ -126,6 +142,7 @@ class TryItOutAE extends SpyglassSpecBase {
     def "copies a JetBrains .http request to the clipboard"() {
         given:
         param('id').locator('.control input').fill('42')
+        fillAuth('signature tok')
 
         when:
         page.locator('button', new Page.LocatorOptions().setHasText('Copy as JetBrains .http')).click()
@@ -135,7 +152,7 @@ class TryItOutAE extends SpyglassSpecBase {
         def clip = page.evaluate('() => navigator.clipboard.readText()') as String
         clip.startsWith('GET http')                  // "METHOD url", not a curl command
         clip.contains('/widgets/42')
-        clip.contains('Authorization:')              // the global header row, blank value and all
+        clip.contains('Authorization: signature tok') // the user-added global header row is emitted
         !clip.contains('curl')
     }
 
@@ -370,6 +387,23 @@ class TryItOutAE extends SpyglassSpecBase {
         then:
         download.suggestedFilename().endsWith('.bin')
         download.suggestedFilename().contains('widgets')
+    }
+
+    def "renders an over-limit JSON response unformatted, without the pretty-print toggle"() {
+        given: 'a JSON response just over the ~2 MB pretty-print size limit'
+        def line = '    "' + ('x' * 72) + '",\n'   // ~80 chars per line
+        def big = '{\n  "items": [\n' + (line * 26000) + '    "end"\n  ]\n}'
+        stub('application/json', big)
+
+        when:
+        sendForResponse()
+
+        then: 'it falls back to plain text — the large-response note shows and the pretty toggle is gone'
+        assertThat(page.locator('.resp-toolarge')).isVisible()
+        page.locator('.resp-pretty').count() == 0
+
+        and: 'the body still renders in the viewer'
+        assertThat(page.locator('.response .code-viewer')).isVisible()
     }
 
     // ---- helpers -------------------------------------------------------------

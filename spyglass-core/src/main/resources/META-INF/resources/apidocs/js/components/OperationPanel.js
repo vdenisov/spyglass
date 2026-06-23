@@ -1,9 +1,11 @@
-import { ref, computed, watch, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
 import { makeNode, serializeNode, importValue, requestBodyMediaTypes, serializeMultipart, serializeUrlEncoded, getResponseSchemas, schemaTree, schemaExample, namedExamples, exampleToField, specRoot, collectBodyWarnings, OMIT } from '../spec.js'
 import { mdBlock } from '../markdown.js'
 import { getValues, recordValue, removeValue, paramKey, bodyFieldKey } from '../history.js'
+import { loadForm, saveForm, removeForm } from '../opForm.js'
 import { copyText } from '../clipboard.js'
 import { statusKind } from '../format.js'
+import { useFlash } from '../useFlash.js'
 import ParamInputs from './ParamInputs.js'
 import ResponseView from './ResponseView.js'
 
@@ -20,7 +22,8 @@ function controlFor(schema) {
   if (t === 'boolean') return { control: 'boolean' }
   if (t === 'array') {
     const items = schema.items || {}
-    return { control: 'array', itemEnum: Array.isArray(items.enum) ? items.enum : null }
+    const itemKind = Array.isArray(items.type) ? items.type.filter(x => x !== 'null')[0] : items.type
+    return { control: 'array', itemEnum: Array.isArray(items.enum) ? items.enum : null, itemKind: itemKind || null }
   }
   return { control: 'text', placeholder: t || 'string' }
 }
@@ -43,9 +46,17 @@ export default {
   components: { ParamInputs, ResponseView, JsonEditor },
   props: {
     operation: { type: Object, required: true },
+    // Per-operation execution state, owned by App and keyed by op.id ({ sending, response, inflight,
+    // seq }). The panel is a single reused instance; routing execution through this injected slice —
+    // not local refs — is what keeps a request alive (and its response addressable) across operation
+    // switches.
+    execState: { type: Object, required: true },
     baseUrl: { type: String, default: '' },
     headers: { type: Array, default: () => [] },
-    accept: { type: String, default: '' }
+    accept: { type: String, default: '' },
+    // Optional hook called once a send settles successfully ({ opId, req, response }); the seam a future
+    // request-history store hangs off without touching send().
+    onExecuted: { type: Function, default: null }
   },
   setup(props) {
     const paramState = ref([])
@@ -56,11 +67,18 @@ export default {
     const useRaw = ref(false)
     const rawText = ref('')
     const rawError = ref('')
-    const response = ref(null)
-    const sending = ref(false)
-    const copied = ref(false)
+    // `response` and `sending` live on the per-operation execState slice (so they survive switches);
+    // expose read-only views so the template and shortcut handler are unchanged.
+    const response = computed(() => props.execState.response)
+    const sending = computed(() => props.execState.sending)
+    const { flag: copied, flash: flashCopied } = useFlash()
     const tab = ref('try')
     const schemaView = ref('schema')
+    // True while rebuild() is reseeding the form from a saved snapshot — suppresses the persist watcher
+    // so seeding doesn't immediately re-save (and so a Reset isn't undone). Reset before the watcher's
+    // post-flush run (see nextTick in rebuild). `saveTimer` debounces same-operation persistence.
+    let seeding = false
+    let saveTimer = null
 
     // Documentation (read-only) derived from the spec for the Schema tab.
     // The selected request-body media type and its editor/serialization strategy.
@@ -161,8 +179,34 @@ export default {
       rawText.value = mt.kind === 'json' ? pretty(currentPayload()) : ''
     }
 
-    const rebuild = () => {
+    // Apply a saved form snapshot onto the freshly-rebuilt tree. JSON bodies hydrate via importValue
+    // (the same translation the Form/Raw toggle uses), so nested objects/arrays/maps and oneOf/anyOf
+    // selections restore to whatever fidelity that path supports; a raw-mode body also restores its
+    // verbatim text and mode. Files (multipart) aren't JSON-serializable, so file inputs stay empty.
+    const seedBody = (snap) => {
+      const mt = bodyMt.value
+      if (!mt) return
+      if (mt.kind === 'other') {
+        if (typeof snap.rawText === 'string') rawText.value = snap.rawText
+        return
+      }
+      if (snap.body !== undefined && bodyNode.value) {
+        importValue(bodyNode.value, snap.body)
+        if (mt.kind === 'json') rawText.value = pretty(currentPayload())
+      }
+      if (mt.kind === 'json' && snap.useRaw) {
+        useRaw.value = true
+        if (typeof snap.rawText === 'string') rawText.value = snap.rawText
+      }
+    }
+
+    // Rebuild the panel for the current operation. By default seeds the form from the saved snapshot
+    // (opForm); pass { fresh: true } (the Reset button) to start from schema defaults instead. Execution
+    // state (response/sending) is NOT touched here — it lives on the execState slice and must survive.
+    const rebuild = ({ fresh = false } = {}) => {
       const op = props.operation
+      const snap = fresh ? null : loadForm(op.id)
+      seeding = true
       paramState.value = op.parameters.map(p => {
         const c = controlFor(p.schema)
         const s = p.schema || {}
@@ -176,15 +220,62 @@ export default {
           example: p.example !== undefined ? p.example : s.example, value: def != null ? String(def) : ''
         }
       })
+      if (snap && snap.params) {
+        for (const p of paramState.value) {
+          const k = p.in + ':' + p.name
+          if (k in snap.params) p.value = snap.params[k]
+        }
+      }
       bodyTypes.value = requestBodyMediaTypes(op)
-      mediaType.value = bodyTypes.value.length ? bodyTypes.value[0].mediaType : ''
+      const defaultMt = bodyTypes.value.length ? bodyTypes.value[0].mediaType : ''
+      mediaType.value = (snap && snap.mediaType && bodyTypes.value.some(t => t.mediaType === snap.mediaType)) ? snap.mediaType : defaultMt
       rebuildBody()
-      response.value = null
-      sending.value = false
+      if (snap) seedBody(snap)
       tab.value = 'try'
+      // Release the persist guard only after the watcher's post-mutation flush, so this reseed isn't
+      // itself persisted (which would otherwise undo a Reset).
+      nextTick(() => { seeding = false })
     }
 
-    watch(() => props.operation, rebuild, { immediate: true })
+    // Build the current-form snapshot (params + media type + Form/Raw mode + raw text + body as JSON).
+    const buildSnapshot = () => {
+      const params = {}
+      for (const p of paramState.value) params[p.in + ':' + p.name] = p.value
+      const mt = bodyMt.value
+      const snap = { params, mediaType: mediaType.value, useRaw: useRaw.value, rawText: rawText.value }
+      if (mt && mt.kind === 'json') {
+        if (useRaw.value) { try { snap.body = JSON.parse(rawText.value || '{}') } catch (e) { /* invalid in-progress JSON — keep rawText only */ } }
+        else snap.body = currentPayload()
+      } else if (mt && (mt.kind === 'form' || mt.kind === 'multipart')) {
+        const v = serializeNode(bodyNode.value)
+        snap.body = v === OMIT ? {} : v
+      }
+      return snap
+    }
+    // Persist an operation's current form immediately (used when switching away, before rebuild reseeds
+    // over it, and on unmount).
+    const flushSave = (op) => {
+      if (!op || seeding) return
+      clearTimeout(saveTimer); saveTimer = null
+      saveForm(op.id, buildSnapshot())
+    }
+
+    // On operation switch: persist the OUTGOING operation's form (the refs still hold its values here,
+    // before rebuild), then rebuild (which reseeds for the incoming operation).
+    watch(() => props.operation, (op, prevOp) => { flushSave(prevOp); rebuild() }, { immediate: true })
+
+    // Debounced persistence of same-operation edits, so a reload mid-editing keeps them. Skipped while
+    // seeding; the captured opId guards against a switch landing the save under the wrong operation.
+    // `deep: true` re-traverses the body node tree on each edit to observe nested field changes. This
+    // cost is intentionally accepted: it is sub-millisecond for any form a human actually fills, and the
+    // only cheaper alternative (persist on `beforeunload` instead of per-edit) would trade crash-safety
+    // for a win that doesn't matter here — nobody hand-edits a thousand-field body in the visual form.
+    watch([paramState, mediaType, useRaw, rawText, bodyNode], () => {
+      if (seeding) return
+      const opId = props.operation.id
+      clearTimeout(saveTimer)
+      saveTimer = setTimeout(() => { if (props.operation.id === opId) saveForm(opId, buildSnapshot()) }, 300)
+    }, { deep: true })
 
     const setRaw = (raw) => {
       if (raw) {
@@ -323,6 +414,11 @@ export default {
     const downloadName = computed(() =>
       (props.operation.method + '-' + props.operation.path).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'response')
 
+    // The in-flight request's AbortController lives on the per-operation execState slice, so the user
+    // can cancel a slow send (there is deliberately no automatic timeout — some endpoints legitimately
+    // take minutes) and so a request keeps running, addressable, across operation switches.
+    const cancel = () => { const c = props.execState.inflight; if (c) c.abort() }
+
     const send = async () => {
       rawError.value = ''
       let req
@@ -334,13 +430,21 @@ export default {
         return
       }
       recordHistory()
-      // Guard against an operation switch mid-request populating a stale response.
-      const opAtStart = props.operation
-      sending.value = true
-      response.value = null
+      // Capture the originating operation's slice and id NOW. After any `await` below, `props` reflects
+      // whatever operation is currently selected, so every post-await write must go through these
+      // captures — that is what routes the response back to the operation it was sent from.
+      const es = props.execState
+      const opId = props.operation.id
+      // Re-sending replaces this operation's own prior in-flight call.
+      if (es.inflight) es.inflight.abort()
+      const ctrl = new AbortController()
+      const mySeq = ++es.seq
+      es.inflight = ctrl
+      es.sending = true
+      es.response = null
       try {
         const t0 = performance.now()
-        const res = await fetch(req.relUrl, { method: req.method, headers: req.headers, body: req.bodyData || req.bodyStr })
+        const res = await fetch(req.relUrl, { method: req.method, headers: req.headers, body: req.bodyData || req.bodyStr, signal: ctrl.signal })
         const dur = Math.round(performance.now() - t0)
         // Capture the exact bytes as a Blob; decode to text only for text-like (or unknown) types so
         // binary stays intact for preview/download. <ResponseView> renders from the Content-Type.
@@ -349,9 +453,10 @@ export default {
         const rawBody = isTextLike(ct) ? await blob.text() : null
         const hdrs = {}
         res.headers.forEach((v, k) => { hdrs[k] = v })
-        if (props.operation !== opAtStart) return
+        // Superseded by a newer send for this operation — drop the stale result.
+        if (es.seq !== mySeq) return
         const headerEntries = Object.entries(hdrs)
-        response.value = {
+        es.response = {
           status: res.status, statusText: res.statusText, ok: res.ok, durationMs: dur,
           // The browser follows 3xx transparently (it won't expose the intermediate redirect to JS);
           // these two flags are the only signal that one happened, surfaced as a note in the view.
@@ -361,18 +466,45 @@ export default {
           headersList: headerEntries.map(([name, value]) => ({ name, value })),
           headersText: headerEntries.map(([k, v]) => k + ': ' + v).join('\n')
         }
+        if (props.onExecuted) props.onExecuted({ opId, req, response: es.response })
       } catch (e) {
-        if (props.operation !== opAtStart) return
-        response.value = { status: '—', statusText: '', ok: false, networkError: e.message }
+        // Drop a superseded call's error/abort (e.g. the one a re-send just aborted) so it can't flash
+        // "Request cancelled" over the newer in-flight; only the current call reports.
+        if (es.seq !== mySeq) return
+        // A user-driven cancel surfaces as a DOMException named AbortError — report it as a cancel, not
+        // a network failure (the response view renders `cancelled` without the "Network error:" prefix).
+        if (e.name === 'AbortError') es.response = { status: '—', statusText: '', ok: false, cancelled: true }
+        else es.response = { status: '—', statusText: '', ok: false, networkError: e.message }
       } finally {
-        if (props.operation === opAtStart) sending.value = false
+        if (es.inflight === ctrl) es.inflight = null
+        if (es.seq === mySeq) es.sending = false
       }
     }
+
+    // Reset this operation to a clean slate: abort any in-flight request (bumping seq so its aborted
+    // call can't write a stale "cancelled" response), drop its in-memory response, forget its saved
+    // form snapshot, and rebuild the form from schema defaults (no seed).
+    const reset = () => {
+      const es = props.execState
+      if (es.inflight) es.inflight.abort()
+      es.seq++
+      es.inflight = null
+      es.sending = false
+      es.response = null
+      removeForm(props.operation.id)
+      rebuild({ fresh: true })
+    }
+
+    onBeforeUnmount(cancel)
+    onBeforeUnmount(() => flushSave(props.operation))
 
     // Ctrl/Cmd+Enter executes the request from anywhere on the operation. A capture-phase listener
     // runs before CodeMirror's default Mod-Enter ("insert blank line"), so it works inside the editor
     // too. Switch to the Try-it-out tab so the response is visible; ignore while a request is in flight.
-    const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+    // Prefer the modern userAgentData.platform (e.g. "macOS"); fall back to the deprecated
+    // navigator.platform, then the UA string, on browsers that don't expose it.
+    const uaPlatform = navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || ''
+    const isMac = /Mac|iPhone|iPad/.test(uaPlatform)
     const sendHint = isMac ? '⌘ Enter' : 'Ctrl+Enter'
     const onExecKey = (e) => {
       if (!((e.ctrlKey || e.metaKey) && e.key === 'Enter')) return
@@ -401,10 +533,7 @@ export default {
     }
 
     const copyToClipboard = async (text) => {
-      if (await copyText(text)) {
-        copied.value = true
-        setTimeout(() => { copied.value = false }, 1500)
-      }
+      if (await copyText(text)) flashCopied()
     }
 
     const sqEscape = (s) => String(s).replace(/'/g, "'\\''")
@@ -456,10 +585,10 @@ export default {
     }
 
     return {
-      paramState, bodyTypes, mediaType, bodyMt, curKind, rebuildBody, bodyNode, bodySupported, useRaw, rawText, rawError, response, sending, copied,
+      paramState, bodyTypes, mediaType, bodyMt, curKind, rebuildBody, bodyNode, bodySupported, useRaw, rawText, rawError, response, sending, cancel, copied,
       tab, schemaView, requestRef, responseRefs, statusClass, editorSchema, mdBlock,
       requestExamples, reqCanPrefill, responseExamples, paramExampleGroups, hasAnyExamples, prefillRaw, prefillParam,
-      setRaw, prettyRaw, send, copyCurl, copyHttp, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys
+      setRaw, prettyRaw, send, reset, copyCurl, copyHttp, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys
     }
   },
   template: `
@@ -468,7 +597,7 @@ export default {
         <span class="method" :class="'m-' + operation.method.toLowerCase()">{{ operation.method }}</span>
         <span class="op-path">{{ operation.path }}</span>
       </header>
-      <p v-if="operation.summary" class="op-summary">{{ operation.summary }}</p>
+      <h2 v-if="operation.summary" class="op-summary">{{ operation.summary }}</h2>
       <div v-if="operation.deprecated" class="deprecated-banner">⚠ This operation is deprecated.</div>
       <div v-if="operation.description" class="op-desc" v-html="mdBlock(operation.description)"></div>
       <p v-if="operation.externalDocs && operation.externalDocs.url" class="op-extdocs">
@@ -487,7 +616,7 @@ export default {
 
         <div v-if="bodyTypes.length" class="body-section">
           <div class="body-head">
-            <h4>Request body</h4>
+            <h3>Request body</h3>
             <select v-if="bodyTypes.length > 1" class="media-select" v-model="mediaType" @change="rebuildBody"
                     v-tip="'Request body content type'">
               <option v-for="t in bodyTypes" :key="t.mediaType" :value="t.mediaType">{{ t.mediaType }}</option>
@@ -534,12 +663,19 @@ export default {
 
         <div class="send-bar">
           <span class="send-cta">
-            <button class="btn-send" type="button" :disabled="sending" v-tip="'Send the request (' + sendHint + ')'" @click="send">{{ sending ? 'Sending…' : 'Send' }}</button>
-            <span class="kbd-hint" v-tip="'Keyboard shortcut to send the request'">{{ sendHint }}</span>
+            <!-- One button that morphs: the green Send becomes a red Cancel while a request is in
+                 flight (same size/position, no reflow, focus kept), with progress shown in the caption. -->
+            <button class="btn-send" :class="{ 'btn-cancel': sending }" type="button"
+              v-tip="sending ? 'Cancel the in-flight request' : 'Send the request (' + sendHint + ')'"
+              @click="sending ? cancel() : send()">{{ sending ? 'Cancel' : 'Send' }}</button>
+            <span v-if="sending" class="sending-note" role="status">Sending…</span>
+            <span v-else class="kbd-hint" v-tip="'Keyboard shortcut to send the request'">{{ sendHint }}</span>
           </span>
           <button class="btn-mini" type="button" @click="copyCurl">Copy as cURL</button>
           <button class="btn-mini" type="button" @click="copyHttp">Copy as JetBrains .http</button>
-          <span v-if="copied" class="copied-note">✓ Copied</span>
+          <button class="btn-mini danger btn-reset-op" type="button" @click="reset"
+            v-tip="'Reset this operation — clear its inputs, saved form, and last response'">Reset</button>
+          <span v-if="copied" class="copied-note" role="status">✓ Copied</span>
         </div>
 
         <ResponseView v-if="response" :resp="response" :name="downloadName" />
@@ -555,11 +691,11 @@ export default {
 
         <template v-if="schemaView === 'schema'">
           <template v-if="requestRef">
-            <h4>Request body</h4>
+            <h3>Request body</h3>
             <div class="schema-block"><SchemaTree :node="requestRef.tree" /></div>
           </template>
 
-          <h4>Responses</h4>
+          <h3>Responses</h3>
           <div v-for="r in responseRefs" :key="r.status" class="schema-block">
             <div class="resp-line"><span class="resp-code" :class="statusClass(r.status)">{{ r.status }}</span> <span class="resp-text">{{ r.description }}</span></div>
             <div v-if="r.headers && r.headers.length" class="resp-headers-doc">
@@ -579,16 +715,16 @@ export default {
           <p v-if="!hasAnyExamples" class="hint">No examples provided in the spec.</p>
 
           <template v-if="paramExampleGroups.length">
-            <h4>Parameters</h4>
+            <h3>Parameters</h3>
             <div v-for="g in paramExampleGroups" :key="g.in + '-' + g.name" class="schema-block">
               <div class="example-group-head"><span class="stree-name">{{ g.name }}</span> <span class="stree-type">{{ g.in }}</span></div>
               <ExampleCard v-for="e in g.examples" :key="e.name" v-bind="e"
-                :can-prefill="true" prefill-label="Use value" @prefill="prefillParam(g, $event)" />
+                :can-prefill="true" :compact="true" prefill-label="Apply" @prefill="prefillParam(g, $event)" />
             </div>
           </template>
 
           <template v-if="requestExamples.length">
-            <h4>Request body</h4>
+            <h3>Request body</h3>
             <div class="schema-block request-examples">
               <ExampleCard v-for="e in requestExamples" :key="e.name" v-bind="e"
                 :can-prefill="reqCanPrefill" @prefill="prefillRaw" />
@@ -597,7 +733,7 @@ export default {
 
           <template v-for="r in responseRefs" :key="r.status">
             <template v-if="responseExamples(r).length">
-              <h4>Response {{ r.status }}</h4>
+              <h3>Response {{ r.status }}</h3>
               <div class="schema-block response-examples">
                 <ExampleCard v-for="e in responseExamples(r)" :key="e.name" v-bind="e" />
               </div>

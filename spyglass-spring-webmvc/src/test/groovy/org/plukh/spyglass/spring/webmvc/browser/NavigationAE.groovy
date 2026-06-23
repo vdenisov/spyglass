@@ -22,8 +22,8 @@ class NavigationAE extends SpyglassSpecBase {
         open()
 
         then:
-        page.locator('.op-link').count() == 15
-        page.locator('.tag-name').allTextContents() == ['Action items', 'Bodies', 'Legacy', 'Lookups', 'Polymorphic', 'Widgets']
+        page.locator('.op-link').count() == 17
+        page.locator('.tag-name').allTextContents() == ['Action items', 'Bodies', 'Composed', 'Legacy', 'Lookups', 'Polymorphic', 'Widgets']
     }
 
     def "filters operations live"() {
@@ -92,14 +92,20 @@ class NavigationAE extends SpyglassSpecBase {
 
     // ---- keyboard navigation -------------------------------------------------
 
-    def "shows a persistent keyboard-hint footer"() {
+    def "shows the explorer branding footer with a GitHub link"() {
         given:
         open()
 
-        expect:
-        page.locator('.sidebar-hint').isVisible()
-        page.locator('.sidebar-hint').textContent().contains('filter')
-        page.locator('.sidebar-hint').textContent().contains('navigate')
+        expect: 'the Spyglass wordmark and blurb, distinct from the API title'
+        page.locator('.sidebar-foot .foot-brand').textContent().contains('Spyglass')
+        page.locator('.sidebar-foot .foot-brand').textContent().contains('OpenAPI Explorer')
+
+        and: 'a GitHub link that opens the repo in a new tab'
+        page.locator('.sidebar-foot .foot-link').getAttribute('href') == 'https://github.com/vdenisov/spyglass'
+        page.locator('.sidebar-foot .foot-link').getAttribute('target') == '_blank'
+
+        and: 'the build-injected version is shown (value not asserted — it changes per release)'
+        page.locator('.sidebar-foot .foot-version').isVisible()
     }
 
     def "no operation is highlighted on a passive load (nothing looks selected)"() {

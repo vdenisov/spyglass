@@ -16,7 +16,7 @@ import org.springframework.context.annotation.Import;
  * classpath, so this configuration only wires the Java beans:
  *
  * <ul>
- *   <li>the stack-neutral core wiring — the OpenAPI customizer and {@code apidocs.*} properties
+ *   <li>the stack-neutral core wiring — the additive springdoc OpenAPI customizer
  *       (see {@link SpyglassCoreConfiguration});</li>
  *   <li>the root/{@code /apidocs} redirects to the static entry point (see {@link SpyglassWebFluxConfig}).</li>
  * </ul>

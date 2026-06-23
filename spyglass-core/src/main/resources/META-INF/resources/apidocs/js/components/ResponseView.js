@@ -3,7 +3,13 @@ import { copyText } from '../clipboard.js'
 import { resolveHeaderLink } from '../extensions.js'
 import { loadJson, saveJson, RESPONSE_PRETTY_KEY } from '../storage.js'
 import { formatBytes, statusKind } from '../format.js'
+import { useFlash } from '../useFlash.js'
 import CodeViewer from './CodeViewer.js'
+
+// Above this body size (chars) we don't parse/pretty-print/JSON-highlight: a multi-MB response would
+// otherwise freeze the tab on JSON.parse + JSON.stringify + CodeMirror's JSON folding/highlighting.
+// Past the limit the body renders as plain, unformatted text (still searchable and downloadable).
+const PRETTY_LIMIT = 2_000_000
 
 // A small curated MIME→extension map for the download filename, used only when the response carries
 // no Content-Disposition. Special cases (jpeg→jpg, gzip→gz, octet-stream→bin) that the subtype
@@ -52,14 +58,18 @@ export default {
     // Pretty-print preference persists like a UI setting (not cleared by "Clear").
     const pretty = ref(loadJson(localStorage, RESPONSE_PRETTY_KEY, true) !== false)
     watch(pretty, (v) => saveJson(localStorage, RESPONSE_PRETTY_KEY, v))
-    const copied = ref(false)
+    const { flag: copied, flash: flashCopied } = useFlash()
 
     // { ok, value } — ok is false on empty or unparseable bodies (distinguishes a real JSON `null`).
+    // An over-limit body is reported tooLarge WITHOUT parsing, so `kind` falls back to plain text and
+    // the expensive parse/stringify/highlight paths are skipped entirely (see PRETTY_LIMIT).
     const parsedJson = computed(() => {
       const raw = props.resp.rawBody
       if (raw == null || raw === '') return { ok: false }
+      if (raw.length > PRETTY_LIMIT) return { ok: false, tooLarge: true }
       try { return { ok: true, value: JSON.parse(raw) } } catch (e) { return { ok: false } }
     })
+    const tooLarge = computed(() => !!parsedJson.value.tooLarge)
 
     const kind = computed(() => {
       const ct = (props.resp.contentType || '').toLowerCase()
@@ -88,26 +98,18 @@ export default {
     onBeforeUnmount(() => { if (imageUrl.value) URL.revokeObjectURL(imageUrl.value) })
 
     const copy = async () => {
-      if (await copyText(displayText.value)) { copied.value = true; setTimeout(() => { copied.value = false }, 1500) }
+      if (await copyText(displayText.value)) flashCopied()
     }
 
     // Response headers as rows, with an optional deep link per value resolved by registered
     // extensions (see extensions.js). resolveHeaderLink reads the reactive resolver registry, so a
-    // resolver registered while extensions load is picked up. Falls back to parsing headersText for
-    // any response shape that predates headersList.
-    const headerRows = computed(() => {
-      const list = props.resp.headersList || (props.resp.headersText || '')
-        .split('\n').filter(Boolean).map((line) => {
-          const i = line.indexOf(': ')
-          return i < 0 ? { name: line, value: '' } : { name: line.slice(0, i), value: line.slice(i + 2) }
-        })
-      return list.map(({ name, value }) => ({ name, value, href: resolveHeaderLink(name, value) }))
-    })
-    const headersCopied = ref(false)
+    // resolver registered while extensions load is picked up. Every response sets headersList (an
+    // error response has none, hence the [] fallback); headersText backs Copy only.
+    const headerRows = computed(() =>
+      (props.resp.headersList || []).map(({ name, value }) => ({ name, value, href: resolveHeaderLink(name, value) })))
+    const { flag: headersCopied, flash: flashHeaders } = useFlash()
     const copyHeaders = async () => {
-      if (await copyText(props.resp.headersText || '')) {
-        headersCopied.value = true; setTimeout(() => { headersCopied.value = false }, 1500)
-      }
+      if (await copyText(props.resp.headersText || '')) flashHeaders()
     }
 
     const downloadFilename = computed(() =>
@@ -127,23 +129,25 @@ export default {
     }
 
     return {
-      pretty, copied, kind, isText, displayText, sizeText, imageUrl, downloadFilename, copy, download,
+      pretty, copied, kind, isText, tooLarge, displayText, sizeText, imageUrl, downloadFilename, copy, download,
       headerRows, headersCopied, copyHeaders, statusKind
     }
   },
   template: `
     <div class="response">
-      <div class="resp-status" :class="statusKind(resp.status)">
+      <div class="resp-status" :class="statusKind(resp.status)" role="status">
         <span class="code">{{ resp.status }} {{ resp.statusText }}</span>
         <span v-if="resp.durationMs != null" class="dur">{{ resp.durationMs }} ms</span>
         <span v-if="resp.contentType" class="resp-ct">{{ resp.contentType }}</span>
       </div>
       <div v-if="resp.redirected" class="resp-redirect">↪ redirected to <code>{{ resp.finalUrl }}</code></div>
       <div v-if="resp.networkError" class="unsupported">Network error: {{ resp.networkError }}</div>
+      <div v-else-if="resp.cancelled" class="unsupported">Request cancelled.</div>
       <template v-else>
         <div class="resp-toolbar">
           <label v-if="kind === 'json'" class="resp-pretty"><input type="checkbox" v-model="pretty" /> Pretty-print</label>
-          <button v-if="isText" type="button" class="btn-mini" @click="copy">{{ copied ? '✓ Copied' : 'Copy' }}</button>
+          <span v-if="tooLarge" class="hint resp-toolarge">Large response ({{ sizeText }}) — shown unformatted</span>
+          <button v-if="isText" type="button" class="btn-mini" aria-live="polite" @click="copy">{{ copied ? '✓ Copied' : 'Copy' }}</button>
           <button type="button" class="btn-mini" @click="download">Download</button>
         </div>
         <details open>
@@ -159,7 +163,7 @@ export default {
           <summary>Headers</summary>
           <div class="resp-headers">
             <div class="resp-headers-toolbar">
-              <button type="button" class="btn-mini" @click="copyHeaders">{{ headersCopied ? '✓ Copied' : 'Copy' }}</button>
+              <button type="button" class="btn-mini" aria-live="polite" @click="copyHeaders">{{ headersCopied ? '✓ Copied' : 'Copy' }}</button>
             </div>
             <div v-for="(h, i) in headerRows" :key="i" class="resp-headers-row">
               <span class="rh-name">{{ h.name }}</span>

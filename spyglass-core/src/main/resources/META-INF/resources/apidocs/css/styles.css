@@ -19,6 +19,22 @@
   --warn-text: #7d5e00;
   --on-accent: #ffffff;            /* text on the saturated method/response/send badges */
   --shadow: rgba(31, 35, 40, .12); /* editor tooltip / autocomplete / lint drop shadow */
+  /* White-on-colour fills (method + response badges, Send button, active tabs, redirect chip) need a
+     fixed background that keeps white text at >=4.5:1 (WCAG-AA) in BOTH themes. The --get/--post/...
+     and --accent vars can't serve this: dark mode brightens them for text legibility, which drops white
+     text on a fill to ~2.5-3.7:1. These fill vars are therefore theme-independent and dark enough for
+     white. */
+  --method-get: #1a7f37;
+  --method-post: #0969da;
+  --method-put: #9a6700;
+  --method-patch: #8250df;
+  --method-delete: #cf222e;
+  --method-other: #656d76;
+  --accent-strong: #0969da;
+  /* Stacking scale: dropdowns/lists below viewport-fixed tooltips. (CodeMirror injects its own
+     higher z-index for editor tooltips, which sit above both.) */
+  --z-dropdown: 50;
+  --z-tooltip: 1000;
   /* Raw-JSON editor syntax tokens (CodeMirror); see JsonEditor.js. The light values are
      CodeMirror's own defaults (string=#a11, number=#164, bool=#219, null=#708 via keyword),
      restored so light mode is unchanged; the dark values are brightened, equally
@@ -120,8 +136,10 @@ body {
   cursor: col-resize;
   background: var(--border);
 }
-.divider:hover { background: var(--accent); }
-.brand { padding: 14px 16px; font-weight: 600; border-bottom: 1px solid var(--border); }
+.divider:hover, .divider:focus-visible { background: var(--accent); }
+.divider:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+/* The brand is the page's <h1>; reset the UA heading size/margin to the original chrome look. */
+.brand { margin: 0; padding: 14px 16px; font-size: 14px; font-weight: 600; border-bottom: 1px solid var(--border); }
 .filter-wrap { position: relative; margin: 10px; }
 .filter {
   width: 100%; box-sizing: border-box; padding: 7px 28px 7px 9px;
@@ -134,17 +152,19 @@ body {
 }
 .filter-clear:hover { color: var(--text); background: var(--accent-weak); }
 .op-list { overflow-y: auto; overflow-x: auto; padding: 0 8px 16px; flex: 1; }
-/* Always-visible keyboard cheat-sheet, pinned below the list. */
-.sidebar-hint {
+/* Explorer (Spyglass) branding, pinned at the very bottom of the rail — distinct from the API title
+   at the top (.brand), which is the spec's info.title. */
+.sidebar-foot {
   flex: 0 0 auto; border-top: 1px solid var(--border);
   padding: 8px 12px; font-size: 11px; color: var(--muted);
-  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  display: flex; flex-direction: column; gap: 2px;
 }
-.sidebar-hint kbd {
-  font-family: var(--mono); font-size: 10px; line-height: 1.4;
-  border: 1px solid var(--border); border-radius: 4px;
-  padding: 0 4px; background: var(--bg); color: var(--text);
-}
+.foot-brand { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.foot-name { font-weight: 600; color: var(--text); }
+.foot-meta { display: flex; align-items: baseline; gap: 6px; }
+.foot-version { font-family: var(--mono); }
+.foot-link { color: var(--accent); text-decoration: none; }
+.foot-link:hover { text-decoration: underline; }
 .tag-group { margin-top: 12px; min-width: 100%; width: max-content; }
 .tag-name {
   font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
@@ -160,20 +180,23 @@ body {
    panel, etc.), accent when it is. No hover highlight: it competed confusingly with the selection. */
 .op-link.active { background: var(--border); }
 .op-list.kb-active .op-link.active { background: var(--accent-weak); }
-/* The full-row bar is the focus indicator, so drop the browser's default keyboard-focus outline. */
-.op-link:focus, .op-link:focus-visible { outline: none; }
+/* The selection bar signals the open op; whenever a row actually holds focus it also draws an inset
+   outline (the bar alone is too low-contrast as a focus cue). Uses :focus, not :focus-visible, so the
+   cue is consistent however focus arrived — a click leaves the row focused, and waiting for the first
+   keystroke to paint the ring (the :focus-visible heuristic) looked like a glitch. */
+.op-link:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
 .op-method {
   flex: 0 0 52px; font-family: var(--mono); font-size: 11px; font-weight: 700;
   text-align: center; padding: 2px 0; border-radius: 4px; color: var(--on-accent);
 }
 .op-link .op-path { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
 
-.m-get .op-method, .method.m-get { background: var(--get); }
-.m-post .op-method, .method.m-post { background: var(--post); }
-.m-put .op-method, .method.m-put { background: var(--put); }
-.m-patch .op-method, .method.m-patch { background: var(--patch); }
-.m-delete .op-method, .method.m-delete { background: var(--delete); }
-.m-head .op-method, .m-options .op-method { background: var(--muted); }
+.m-get .op-method, .method.m-get { background: var(--method-get); }
+.m-post .op-method, .method.m-post { background: var(--method-post); }
+.m-put .op-method, .method.m-put { background: var(--method-put); }
+.m-patch .op-method, .method.m-patch { background: var(--method-patch); }
+.m-delete .op-method, .method.m-delete { background: var(--method-delete); }
+.m-head .op-method, .m-options .op-method { background: var(--method-other); }
 
 /* --- main --- */
 .main { flex: 1; overflow-y: auto; }
@@ -203,7 +226,7 @@ body {
 }
 .theme-toggle button + button { border-left: 1px solid var(--border); }
 .theme-toggle button:hover { color: var(--text); }
-.theme-toggle button.active { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.theme-toggle button.active { background: var(--accent-strong); color: var(--on-accent); font-weight: 600; }
 
 .topbar-left { display: flex; flex-direction: column; gap: 10px; }
 .base-url, .accept-field { display: flex; flex-direction: column; gap: 4px; }
@@ -230,11 +253,15 @@ input[readonly] { background: var(--bg-alt); color: var(--muted); cursor: defaul
 .op-header { display: flex; align-items: center; gap: 10px; }
 .method { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--on-accent); padding: 3px 10px; border-radius: 5px; }
 .op-header .op-path { font-family: var(--mono); font-size: 16px; }
-.op-summary { font-weight: 600; margin: 10px 0 2px; }
+/* The operation title is the panel's <h2>; keep it at body size (UA would blow it up). */
+.op-summary { font-size: 15px; font-weight: 600; margin: 10px 0 2px; }
 .op-desc { color: var(--muted); margin: 2px 0 8px; line-height: 1.45; }
 .op-desc p { margin: 4px 0; }
 
-h4 { margin: 18px 0 8px; font-size: 13px; }
+/* Section headings under the operation title (Parameters, Request body, Responses, …). Promoted from
+   <h4> to <h3> so the document heading scale is continuous (h1 brand → h2 op title → h3 sections); the
+   compact size is kept. */
+h3 { margin: 18px 0 8px; font-size: 13px; }
 
 /* --- operation tabs --- */
 .op-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 14px 0 4px; }
@@ -253,9 +280,9 @@ h4 { margin: 18px 0 8px; font-size: 13px; }
   font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--on-accent);
   padding: 2px 8px; border-radius: 5px;
 }
-.resp-code.ok { background: var(--get); }
-.resp-code.redirect { background: var(--accent); }
-.resp-code.err { background: var(--delete); }
+.resp-code.ok { background: var(--method-get); }
+.resp-code.redirect { background: var(--accent-strong); }
+.resp-code.err { background: var(--method-delete); }
 .resp-text { color: var(--muted); font-size: 13px; }
 .example-json {
   margin: 0; padding: 12px; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 6px;
@@ -294,11 +321,11 @@ h4 { margin: 18px 0 8px; font-size: 13px; }
 
 /* themed hover/focus tooltip (see js/tooltip.js, v-tip directive) */
 .app-tooltip {
-  position: fixed; z-index: 1000; max-width: 280px;
+  position: fixed; z-index: var(--z-tooltip); max-width: 280px;
   background: var(--bg-alt); color: var(--text);
   border: 1px solid var(--border); border-radius: 6px;
   padding: 6px 9px; font-size: 12px; line-height: 1.45;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
+  box-shadow: 0 4px 14px var(--shadow);
   opacity: 0; transform: translateY(2px); pointer-events: none;
   transition: opacity .1s ease, transform .1s ease;
   white-space: normal; overflow-wrap: anywhere;
@@ -356,11 +383,11 @@ h4 { margin: 18px 0 8px; font-size: 13px; }
   width: 100%; font-family: var(--mono); font-size: 13px; padding: 8px;
   border: 1px solid var(--border); border-radius: 6px; resize: vertical;
 }
-.array-param { display: flex; flex-direction: column; gap: 3px; flex: 1; }
-.array-param textarea {
-  width: 100%; font-family: var(--mono); font-size: 13px; padding: 6px 8px;
-  border: 1px solid var(--border); border-radius: 6px; resize: vertical;
-}
+/* Array query/header params: label + `array` tag on top, full-width one-per-line textarea below —
+   the body's array control without the tree-only accent box (params are flat, not nested). */
+.param-array { margin: 5px 0; }
+.param-array .field-label { flex: none; margin-bottom: 3px; }
+.param-array .array-text { margin: 0; }
 
 .map-body {
   background: var(--bg-alt); border: 1px solid var(--border); border-left: 3px solid var(--accent);
@@ -387,14 +414,14 @@ h4 { margin: 18px 0 8px; font-size: 13px; }
    separates it, so drop the redundant second divider. */
 .body-section:first-child { border-top: none; padding-top: 0; }
 .body-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.body-head h4 { margin: 0; margin-right: auto; }
+.body-head h3 { margin: 0; margin-right: auto; }
 .body-tabs button {
   border: 1px solid var(--border); background: var(--bg); padding: 5px 12px; cursor: pointer;
   font-size: 12px; color: var(--text);
 }
 .body-tabs button:first-child { border-radius: 6px 0 0 6px; }
 .body-tabs button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
-.body-tabs button.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.body-tabs button.active { background: var(--accent-strong); color: var(--on-accent); border-color: var(--accent-strong); }
 .body-tabs button:disabled { opacity: .5; cursor: not-allowed; }
 
 /* request-body media-type selector + non-JSON body controls */
@@ -414,6 +441,17 @@ h4 { margin: 18px 0 8px; font-size: 13px; }
 .example-apply-cluster { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
 .example-desc { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
 .example-ext { display: inline-block; font-family: var(--mono); font-size: 12px; word-break: break-all; }
+/* Compact parameter example: name · value pill · inline summary · Apply, on one line. */
+.example-card-compact { margin-bottom: 8px; }
+.example-inline { display: flex; align-items: center; gap: 10px; }
+.example-inline .example-name { flex: 0 0 auto; min-width: 96px; font-family: var(--mono); font-size: 12px; }
+.example-pill {
+  flex: 0 1 auto; min-width: 0; font-family: var(--mono); font-size: 12px;
+  background: var(--bg-alt); border: 1px solid var(--border); border-radius: 6px;
+  padding: 2px 7px; white-space: nowrap; overflow-x: auto;
+}
+.example-inline .example-summary { flex: 1 1 auto; }
+.example-card-compact .example-desc { margin: 3px 0 0; }
 .example-group-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
 .example-applied { color: var(--get); font-size: 12px; }
 /* Static JSON highlighting for example cards — reuses the Raw editor's token palette (keys inherit). */
@@ -572,12 +610,16 @@ h4 { margin: 18px 0 8px; font-size: 13px; }
   font-size: 11px; color: var(--muted); border: 1px solid var(--border);
   border-radius: 4px; padding: 1px 5px; font-family: var(--mono); user-select: none;
 }
+/* In-flight progress caption, in the slot the kbd hint normally occupies. */
+.sending-note { font-size: 11px; color: var(--muted); user-select: none; }
 .copied-note { color: var(--get); font-size: 12px; }
 .btn-send {
-  background: var(--get); color: var(--on-accent); border: none; cursor: pointer;
+  background: var(--method-get); color: var(--on-accent); border: none; cursor: pointer;
   padding: 8px 22px; border-radius: 6px; font-size: 14px; font-weight: 600;
 }
 .btn-send:disabled { opacity: .6; cursor: default; }
+/* While a request is in flight the primary button morphs into the Cancel control. */
+.btn-send.btn-cancel { background: var(--method-delete); }
 
 /* --- response --- */
 .response { margin-top: 14px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -591,6 +633,7 @@ h4 { margin: 18px 0 8px; font-size: 13px; }
 .resp-redirect code { font-family: var(--mono); word-break: break-all; }
 .response details { border-top: 1px solid var(--border); }
 .response summary { cursor: pointer; padding: 8px 12px; font-size: 12px; color: var(--muted); user-select: none; }
+.response summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
 .response pre {
   margin: 0; padding: 12px; background: var(--bg-alt); font-family: var(--mono);
   font-size: 12px; overflow-x: auto; max-height: 460px;
@@ -672,7 +715,7 @@ h4 { margin: 18px 0 8px; font-size: 13px; }
 .combobox.has-caret > .combobox-input[type=number]::-webkit-outer-spin-button,
 .combobox.has-caret > .combobox-input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .combobox-list {
-  position: absolute; top: calc(100% + 2px); left: 0; z-index: 50; min-width: 100%;
+  position: absolute; top: calc(100% + 2px); left: 0; z-index: var(--z-dropdown); min-width: 100%;
   margin: 0; padding: 4px; list-style: none; background: var(--bg);
   border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px var(--shadow);
   max-height: 240px; overflow-y: auto;
@@ -687,3 +730,14 @@ h4 { margin: 18px 0 8px; font-size: 13px; }
 .combobox-del { flex: 0 0 auto; color: var(--muted); opacity: 0; cursor: pointer; font-size: 11px; padding: 0 2px; }
 .combobox-list li:hover .combobox-del, .combobox-list li.active .combobox-del { opacity: .55; }
 .combobox-del:hover { color: var(--danger); opacity: 1; }
+
+/* Respect a reduced-motion preference: near-instant transitions/animations (the tooltip fade, the
+   theme/tab color transitions) and no smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

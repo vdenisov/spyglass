@@ -16,7 +16,10 @@ else
   ROOT="$(cd .. && pwd)"
 fi
 
-IMAGE="node:20-alpine"
+# Pinned to a specific Node patch for byte-identical bundle reproducibility; the front-end CI
+# gate uses this same image, so a local build and CI produce identical bytes. Pin to a digest
+# (node:20-alpine@sha256:...) for an even stricter guarantee.
+IMAGE="node:20.18.1-alpine"
 echo "Building CodeMirror bundle in ${IMAGE} (repo root: ${ROOT})…"
 MSYS_NO_PATHCONV=1 docker run --rm -v "${ROOT}:/work" -w /work/frontend "${IMAGE}" sh -c '
   set -e
