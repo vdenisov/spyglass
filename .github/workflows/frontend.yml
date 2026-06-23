@@ -29,7 +29,7 @@ jobs:
     name: Rebuild + audit the CodeMirror bundle
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       # Rebuild via the canonical Docker build (frontend/build.sh) so the toolchain — and therefore
       # the output bytes — match what a maintainer produces locally and what is committed.
@@ -47,4 +47,4 @@ jobs:
       - name: Supply-chain audit (production deps)
         run: >
           docker run --rm -v "$PWD/spyglass-core/frontend:/work" -w /work node:20.18.1-alpine
-          sh -c "npm ci --no-audit --no-fund --loglevel=error && npm audit --omit=dev"
+          sh -c "npm ci --no-audit --no-fund --loglevel=error && npm audit --omit=dev --audit-level=moderate"

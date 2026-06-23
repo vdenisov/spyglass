@@ -60,4 +60,55 @@
         </plugins>
     </build>
 
+    <profiles>
+        <!--
+            Release-only. spyglass-core has no Java sources, so maven-javadoc/maven-source produce
+            nothing and a Maven Central deploy would be rejected for the missing -javadoc/-sources jars.
+            Skip those (no-op here anyway) and attach compliant placeholder jars instead — each carries a
+            short README pointing at the real content (the assets in the main jar). Scoped to -Prelease,
+            so normal builds are unaffected; the parent gpg/central plugins then sign and upload them.
+        -->
+        <profile>
+            <id>release</id>
+            <properties>
+                <maven.source.skip>true</maven.source.skip>
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>placeholder-javadoc-jar</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                                <configuration>
+                                    <classifier>javadoc</classifier>
+                                    <classesDirectory>${project.basedir}/src/release/javadoc</classesDirectory>
+                                    <forceCreation>true</forceCreation>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>placeholder-sources-jar</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                                <configuration>
+                                    <classifier>sources</classifier>
+                                    <classesDirectory>${project.basedir}/src/release/sources</classesDirectory>
+                                    <forceCreation>true</forceCreation>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>

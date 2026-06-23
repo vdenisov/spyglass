@@ -275,6 +275,14 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-javadoc-plugin</artifactId>
                         <version>${maven-javadoc-plugin.version}</version>
+                        <configuration>
+                            <!--
+                                Each module's javadoc is self-contained; don't auto-link to sibling
+                                reactor modules (the asset-only/Groovy modules have no javadoc dir, which
+                                otherwise logs noisy "Error fetching link ... Ignored it" lines).
+                            -->
+                            <detectOfflineLinks>false</detectOfflineLinks>
+                        </configuration>
                         <executions>
                             <execution>
                                 <id>attach-javadocs</id>

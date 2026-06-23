@@ -70,4 +70,41 @@
         </plugins>
     </build>
 
+    <profiles>
+        <!--
+            Release-only. The harness is Groovy with no Java sources, so maven-javadoc produces no jar
+            and a Maven Central deploy would be rejected for the missing -javadoc.jar. Skip it and attach
+            a compliant placeholder (a README pointing at the -sources.jar, which carries the real Groovy
+            source). Scoped to -Prelease; the parent gpg/central plugins then sign and upload it.
+        -->
+        <profile>
+            <id>release</id>
+            <properties>
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>placeholder-javadoc-jar</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                                <configuration>
+                                    <classifier>javadoc</classifier>
+                                    <classesDirectory>${project.basedir}/src/release/javadoc</classesDirectory>
+                                    <forceCreation>true</forceCreation>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>
