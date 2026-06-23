@@ -8,5 +8,5 @@ server:
 
 apidocs:
   demo:
-    # Wires the organization-neutral demo endpoints (DemoEndpointsConfiguration). On for this app.
+    # Wires the consumer-neutral demo endpoints (DemoEndpointsConfiguration). On for this app.
     enabled: true

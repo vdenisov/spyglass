@@ -22,3 +22,4 @@ Thumbs.db
 # explicitly below.
 /*.md
 !/README.md
+!/CONTRIBUTING.md
