@@ -81,12 +81,12 @@ springdoc generates `/v3/api-docs` from your controllers; Spyglass serves the ex
 > ask for it. A separate extension can layer an auto-registering shim on top (so its consumers get the
 > explorer with zero code); see [`docs/quick-start.md`](docs/quick-start.md).
 
-> Pre-1.0: not yet on Maven Central. Build and install locally with `mvn install`, then depend on the
-> `1.0.0-SNAPSHOT` artifacts.
-
 ## Try it
 
-A runnable, dependency-free showcase lives in `spyglass-demo`:
+**Live demo: <https://spyglass-demo.fly.dev/apidocs>** — an always-on instance where "Try It Out"
+executes real (same-origin) requests against a set of toy endpoints.
+
+Or run the same showcase locally:
 
 ```bash
 mvn -pl spyglass-demo spring-boot:run
@@ -139,8 +139,9 @@ The springdoc compatibility seam targets the springdoc-**common** `OpenApiCustom
 
 ## Status
 
-Pre-1.0 and evolving: the public surface (entry points, properties, `config.js` precedence, the `x-*`
-extension names) may still change before 1.0.
+**1.0.0 is released** and available on Maven Central. Semantic versioning applies from here: the public
+surface (entry points, `apidocs.*` properties, `config.js` precedence, the `x-*` extension names) stays
+stable across the 1.x line.
 
 ## Contributing
 
