@@ -15,8 +15,10 @@ primary_region = "ams"
 
 # Cap the JVM heap to a share of the 512 MB machine so a Spring Boot 3.5 app
 # starts comfortably without OOM (256 MB is too tight for this JVM workload).
+# UseCompactObjectHeaders (a JDK 25 product feature, still opt-in) shrinks object
+# headers to 64 bits, trimming the object-heavy Spring heap by ~10-20%.
 [env]
-  JAVA_TOOL_OPTIONS = "-XX:MaxRAMPercentage=70.0"
+  JAVA_TOOL_OPTIONS = "-XX:MaxRAMPercentage=70.0 -XX:+UseCompactObjectHeaders"
 
 [http_service]
   internal_port = 8080

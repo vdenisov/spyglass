@@ -15,7 +15,10 @@ COPY . .
 RUN mvn -B -ntp -pl spyglass-demo -am -DskipTests package
 
 # --- runtime stage: JRE + the exec (fat) jar ---
-FROM eclipse-temurin:21-jre
+# Runs on JDK 25 (latest LTS) even though the library targets Java 21 bytecode:
+# the runtime is forward-compatible, and 25 enables compact object headers
+# (see fly.toml) for a smaller heap footprint on the constrained demo machine.
+FROM eclipse-temurin:25-jre
 WORKDIR /app
 # Wildcard so the copy survives the project version bump (…-1.0.0-exec.jar etc.).
 # The plain jar is the default artifact; the runnable one carries the "exec" classifier.
