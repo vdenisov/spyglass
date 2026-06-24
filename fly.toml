@@ -1,0 +1,38 @@
+# Fly.io deployment for the public Spyglass demo (spyglass-demo).
+#
+# One always-on shared-cpu-1x machine, served over HTTPS on Fly's free shared
+# IPv4 (SNI-routed) + free IPv6 — no dedicated IPv4 is allocated, so there is no
+# extra IP charge. Reachable at https://<app>.fly.dev once deployed.
+#
+# `fly launch` may rewrite `app`/`primary_region` to your chosen values; the
+# rest of this file is the intended baseline.
+
+app = "spyglass-demo"
+primary_region = "ams"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Cap the JVM heap to a share of the 512 MB machine so a Spring Boot 3.5 app
+# starts comfortably without OOM (256 MB is too tight for this JVM workload).
+[env]
+  JAVA_TOOL_OPTIONS = "-XX:MaxRAMPercentage=70.0"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Always-on: keep one machine running so visitors never hit a cold start.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "get"
+    path = "/apidocs/index.html"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "30s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
