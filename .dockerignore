@@ -1,0 +1,14 @@
+# Keep the Docker build context small and reproducible. The image builds the
+# demo from source via Maven, so prebuilt output and tooling caches are excluded.
+**/target
+**/node_modules
+.git
+.github
+.idea
+.vscode
+*.iml
+.DS_Store
+Thumbs.db
+
+# Root-level planning/scratch Markdown (already git-ignored) — not needed to build.
+/*.md
