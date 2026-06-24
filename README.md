@@ -89,6 +89,7 @@ executes real (same-origin) requests against a set of toy endpoints.
 Or run the same showcase locally:
 
 ```bash
+mvn -pl spyglass-demo -am clean install -DskipTests=true
 mvn -pl spyglass-demo spring-boot:run
 # then open http://localhost:8080/apidocs
 ```

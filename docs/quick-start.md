@@ -75,6 +75,7 @@ document (or point Spyglass at a different path — see [configuration](configur
 `spyglass-demo` is a complete, self-contained servlet example:
 
 ```bash
+mvn -pl spyglass-demo -am clean install -DskipTests=true
 mvn -pl spyglass-demo spring-boot:run
 # http://localhost:8080/apidocs
 ```
