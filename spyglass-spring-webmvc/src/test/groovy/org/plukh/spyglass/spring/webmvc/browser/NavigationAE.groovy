@@ -1,5 +1,12 @@
 package org.plukh.spyglass.spring.webmvc.browser
 
+import com.microsoft.playwright.Route
+import org.springframework.core.io.ClassPathResource
+
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.atomic.AtomicReference
+import java.util.function.Consumer
+
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
 
 /**
@@ -24,6 +31,29 @@ class NavigationAE extends SpyglassSpecBase {
         then:
         page.locator('.op-link').count() == 17
         page.locator('.tag-name').allTextContents() == ['Action items', 'Bodies', 'Composed', 'Legacy', 'Lookups', 'Polymorphic', 'Widgets']
+    }
+
+    def "shows a loading state in the sidebar until the spec resolves (not 'No operations match')"() {
+        given: 'the spec response is held open so the pre-load window is observable'
+        def held = new AtomicReference<Route>()
+        page.route('**/v3/api-docs', ({ Route route -> held.set(route) } as Consumer<Route>))
+
+        when: 'the explorer is opened while the spec is still in flight'
+        page.navigate('/apidocs/index.html')
+        page.waitForSelector('.op-list .hint')
+
+        then: 'the sidebar shows the loading hint, not the empty-results message'
+        page.locator('.op-list .hint').textContent().contains('Loading spec')
+        page.locator('.op-link').count() == 0
+
+        when: 'the spec finally resolves'
+        awaitRoute(held).fulfill(new Route.FulfillOptions().setStatus(200)
+                .setContentType('application/json').setBody(specBody()))
+        page.waitForSelector('.sidebar .op-link')
+
+        then: 'the loading hint is gone and the operations are listed'
+        page.locator('.op-list .hint').count() == 0
+        page.locator('.op-link').count() == 17
     }
 
     def "filters operations live"() {
@@ -195,6 +225,18 @@ class NavigationAE extends SpyglassSpecBase {
     }
 
     // ---- helpers -------------------------------------------------------------
+
+    /** Waits until the (background-thread) route handler has captured the held spec request. */
+    private Route awaitRoute(AtomicReference<Route> ref) {
+        def deadline = System.currentTimeMillis() + 5000
+        while (ref.get() == null && System.currentTimeMillis() < deadline) Thread.sleep(25)
+        ref.get()
+    }
+
+    /** The OpenAPI fixture body the test app serves at /v3/api-docs. */
+    private String specBody() {
+        new ClassPathResource('apidocs-test/openapi-fixture.json').inputStream.getText(StandardCharsets.UTF_8.name())
+    }
 
     /** Drags the resize divider to the far left; the component clamps the width to its minimum. */
     private void narrowSidebarToMinimum() {
