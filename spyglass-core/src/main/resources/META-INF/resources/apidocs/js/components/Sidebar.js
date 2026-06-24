@@ -15,7 +15,8 @@ export default {
   props: {
     operations: { type: Array, required: true },
     selectedId: { type: String, default: '' },
-    title: { type: String, default: 'API' }
+    title: { type: String, default: 'API' },
+    loading: { type: Boolean, default: false }
   },
   emits: ['select'],
   setup(props, { emit }) {
@@ -193,7 +194,8 @@ export default {
             <span v-if="op.deprecated" class="dep-tag sidebar-dep">depr</span>
           </button>
         </div>
-        <div v-if="!groups.length" class="hint">No operations match.</div>
+        <div v-if="loading" class="hint">Loading spec…</div>
+        <div v-else-if="!groups.length" class="hint">No operations match.</div>
       </div>
       <div class="sidebar-foot">
         <span class="foot-brand"><span class="foot-name">Spyglass</span> · OpenAPI Explorer</span>

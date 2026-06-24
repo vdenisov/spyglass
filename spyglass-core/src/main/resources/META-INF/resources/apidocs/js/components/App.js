@@ -278,7 +278,7 @@ export default {
   },
   template: `
     <div class="layout">
-      <Sidebar :operations="operations" :selected-id="selected ? selected.id : ''" :title="title" @select="select"
+      <Sidebar :operations="operations" :selected-id="selected ? selected.id : ''" :title="title" :loading="loading" @select="select"
         :style="{ flex: '0 0 ' + sidebarWidth + 'px', width: sidebarWidth + 'px' }" />
       <div class="divider" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"
         :aria-valuenow="Math.round(sidebarWidth)" :aria-valuemin="minSidebar" tabindex="0"
