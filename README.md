@@ -48,7 +48,7 @@ Add the adapter for your web stack (and a springdoc starter, if your service doe
 <dependency>
   <groupId>org.plukh.spyglass</groupId>
   <artifactId>spyglass-spring-webmvc</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
+  <version>1.0.0</version>
 </dependency>
 ```
 
@@ -64,7 +64,7 @@ class ApiDocsConfig {}
 <dependency>
   <groupId>org.plukh.spyglass</groupId>
   <artifactId>spyglass-spring-webflux</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
+  <version>1.0.0</version>
 </dependency>
 ```
 

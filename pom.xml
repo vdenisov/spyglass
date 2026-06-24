@@ -4,7 +4,7 @@
 
     <groupId>org.plukh.spyglass</groupId>
     <artifactId>spyglass-parent</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <packaging>pom</packaging>
 
     <name>Spyglass (parent)</name>
@@ -79,14 +79,14 @@
         <!-- Release-only plugins (bound under the "release" profile; never run by a normal build). -->
         <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
         <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
-        <central-publishing-maven-plugin.version>0.7.0</central-publishing-maven-plugin.version>
+        <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
 
         <!--
             Fixed build timestamp for reproducible artifacts (Maven Reproducible Builds). Bump to the
             release date when cutting a release; a stale value only affects archive entry timestamps,
             not behaviour.
         -->
-        <project.build.outputTimestamp>2026-06-23T17:14:31Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-06-24T10:34:20Z</project.build.outputTimestamp>
     </properties>
 
     <dependencyManagement>
@@ -360,6 +360,14 @@
                         <configuration>
                             <publishingServerId>central</publishingServerId>
                             <autoPublish>false</autoPublish>
+                            <!--
+                                The demo is a runnable showcase, not a published library (it skips
+                                deploy/sign/source/javadoc). Keep it out of the Central bundle so its
+                                unsigned, source-/javadoc-less artifacts don't fail portal validation.
+                            -->
+                            <excludeArtifacts>
+                                <excludeArtifact>spyglass-demo</excludeArtifact>
+                            </excludeArtifacts>
                         </configuration>
                     </plugin>
                 </plugins>
