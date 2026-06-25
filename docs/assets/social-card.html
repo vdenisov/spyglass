@@ -43,22 +43,22 @@
     color: var(--ink);
     overflow: hidden;
     display: grid;
-    grid-template-columns: 1fr 560px;
+    grid-template-columns: 1fr 520px;
   }
 
   /* ---- Left: message ---- */
   .left { padding: 64px; display: flex; flex-direction: column; justify-content: space-between; }
 
   .brand { display: flex; align-items: center; gap: 14px; }
-  .brand .name { font-size: 32px; font-weight: 700; letter-spacing: .2px; }
+  .brand .name { font-size: 40px; font-weight: 700; letter-spacing: .2px; }
 
   .eyebrow {
-    font-size: 18px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+    font-size: 22px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
     color: var(--accent); margin-bottom: 18px;
   }
   /* HEADLINE — punchy / alternative-to (active). The descriptive variant is
      kept commented in the markup below if you ever want to swap back. */
-  .punchy { font-size: 80px; line-height: 1.0; font-weight: 800; letter-spacing: -2.5px; }
+  .punchy { font-size: 90px; line-height: 1.0; font-weight: 800; letter-spacing: -3px; }
   .punchy .strike { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(255,90,90,.8); text-decoration-thickness: 5px; }
   h1 {
     font-size: 56px; line-height: 1.08; font-weight: 800; letter-spacing: -1px;
@@ -66,9 +66,9 @@
   }
   h1 .hl { color: var(--accent); }
 
-  .sub { margin-top: 22px; font-size: 24px; line-height: 1.45; color: var(--body); max-width: 540px; }
+  .sub { margin-top: 22px; font-size: 27px; line-height: 1.45; color: var(--body); max-width: 580px; }
 
-  .trust { display: flex; align-items: center; gap: 12px; font-size: 19px; font-weight: 500; color: var(--body); }
+  .trust { display: flex; align-items: center; gap: 12px; font-size: 23px; font-weight: 500; color: var(--body); }
   .trust .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--muted); opacity: .6; }
   .trust b { color: var(--ink); font-weight: 600; }
 
@@ -138,7 +138,7 @@
         <!-- Descriptive alternative (swap back if you ever want it):
         <h1>The <span class="hl">no-build</span> OpenAPI explorer you embed in your own service.</h1>
         -->
-        <p class="sub">An embeddable, no-build OpenAPI explorer for Spring Boot. One dependency, no npm.</p>
+        <p class="sub">An embeddable, no-build OpenAPI explorer<br>One dependency, no npm</p>
       </div>
 
       <div class="trust">
