@@ -5,21 +5,27 @@
 <title>Spyglass social card</title>
 <style>
   /* ----------------------------------------------------------------------
-     GitHub social preview is 1280x640 (2:1). The .card below is EXACTLY
-     that size. To export:
-       - Open in a browser, zoom to 200% for a crisp 2560x1280 capture,
-         OR screenshot the .card element directly with a devtools/CLI tool.
-       - Save as PNG and upload at: repo Settings -> Social preview.
+     Card is 1280x670 = the universal OG ratio 1.91:1 (canonical 1200x630),
+     which Facebook / X / LinkedIn / Discord all expect and GitHub accepts.
+     To export cleanly (avoids OS-scaling / browser-zoom size surprises):
+       - DevTools (F12) -> select the <div class="card"> element ->
+         right-click -> "Capture node screenshot". Grabs the exact element
+         bounds at your device pixel ratio (e.g. 1600x838 at 125% OS scale).
+       - Any 1.91:1 PNG >= ~1200px wide works; bigger is just sharper. Do NOT
+         stack browser zoom on top of OS scaling -- it lands on odd, non-1.91 sizes.
+       - Upload at: repo Settings -> Social preview.
      Keep important text inside the 64px padding (some surfaces crop edges).
      -------------------------------------------------------------------- */
   :root {
     --bg0: #0b1220;
     --bg1: #0d1117;
     --ink: #e6edf3;
+    --body: #c7d2e0;       /* readable body text on dark — brighter than --muted */
     --muted: #8b9bb0;
     --accent: #34d4c4;     /* spyglass teal */
     --accent-2: #38bdf8;
     --line: rgba(255,255,255,.08);
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, "Liberation Mono", monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -29,7 +35,7 @@
   }
   .card {
     position: relative;
-    width: 1280px; height: 640px;
+    width: 1280px; height: 670px;
     background:
       radial-gradient(1100px 600px at 78% -10%, rgba(56,189,248,.10), transparent 60%),
       radial-gradient(900px 500px at 0% 110%, rgba(52,212,196,.10), transparent 55%),
@@ -47,7 +53,7 @@
   .brand .name { font-size: 32px; font-weight: 700; letter-spacing: .2px; }
 
   .eyebrow {
-    font-size: 15px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase;
+    font-size: 18px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
     color: var(--accent); margin-bottom: 18px;
   }
   /* HEADLINE — punchy / alternative-to (active). The descriptive variant is
@@ -60,36 +66,63 @@
   }
   h1 .hl { color: var(--accent); }
 
-  .sub { margin-top: 22px; font-size: 21px; line-height: 1.45; color: var(--muted); max-width: 520px; }
+  .sub { margin-top: 22px; font-size: 24px; line-height: 1.45; color: var(--body); max-width: 540px; }
 
-  .trust { display: flex; align-items: center; gap: 12px; font-size: 16px; color: var(--muted); }
+  .trust { display: flex; align-items: center; gap: 12px; font-size: 19px; font-weight: 500; color: var(--body); }
   .trust .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--muted); opacity: .6; }
   .trust b { color: var(--ink); font-weight: 600; }
 
-  /* ---- Right: product shot ---- */
+  /* ---- Right: CSS-rendered explorer motif (vector, not a screenshot —
+     crisp at any size, never crops wrong, never goes stale) ---- */
   .right { position: relative; }
-  .frame {
-    position: absolute; top: 76px; left: 0; right: -80px; bottom: 76px;
-    border: 1px solid var(--line); border-radius: 14px 0 0 14px;
-    background: #11161d;
-    box-shadow: -30px 30px 80px rgba(0,0,0,.45);
+  .window {
+    position: absolute; top: 74px; left: 40px; right: -16px; bottom: 62px;
+    display: flex; flex-direction: column;
+    border: 1px solid var(--line); border-radius: 14px;
+    background: #0d1117;
+    box-shadow: -26px 30px 80px rgba(0,0,0,.5);
     overflow: hidden;
   }
-  .frame .bar {
-    height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 14px;
-    background: #0d1117; border-bottom: 1px solid var(--line);
+  .window .bar {
+    flex: 0 0 40px; display: flex; align-items: center; gap: 8px; padding: 0 16px;
+    background: #161b22; border-bottom: 1px solid var(--line);
   }
-  .frame .bar i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
-  .frame .bar i:nth-child(1){ background:#ff5f57 } .frame .bar i:nth-child(2){ background:#febc2e } .frame .bar i:nth-child(3){ background:#28c840 }
-  .frame .bar .url { margin-left: 12px; font-size: 13px; color: var(--muted); }
-  .shot { position: relative; height: calc(100% - 38px); }
-  .shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: left top; display: block; }
-  /* Placeholder shown until screenshot.png is dropped next to this file */
-  .shot .placeholder {
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    text-align: center; color: var(--muted); font-size: 15px; line-height: 1.6;
-    background: repeating-linear-gradient(45deg, #11161d, #11161d 14px, #0f141b 14px, #0f141b 28px);
-  }
+  .window .bar i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .window .bar i:nth-child(1){ background:#ff5f57 } .window .bar i:nth-child(2){ background:#febc2e } .window .bar i:nth-child(3){ background:#28c840 }
+  .window .bar .url { margin-left: 14px; font-size: 14px; color: var(--muted); font-family: var(--mono); }
+
+  /* actions pinned low via margin-top:auto so Send sits near the bottom and the
+     form fills the vertical space instead of clustering at the top. */
+  .panel { flex: 1 1 auto; padding: 30px 32px; display: flex; flex-direction: column; gap: 20px; }
+  .op { display: flex; align-items: center; gap: 12px; }
+  .method { font-size: 16px; font-weight: 700; letter-spacing: .5px; color: #fff; padding: 5px 12px; border-radius: 7px; background: #2f7bf6; }
+  .path { font-family: var(--mono); font-size: 22px; font-weight: 600; color: var(--ink); }
+
+  .tabs { display: flex; gap: 28px; border-bottom: 1px solid var(--line); }
+  .tab { font-size: 18px; color: var(--muted); padding-bottom: 11px; }
+  .tab.on { color: #58a6ff; border-bottom: 2px solid #58a6ff; font-weight: 600; }
+
+  .section { display: flex; align-items: center; gap: 12px; }
+  .section h4 { font-size: 20px; font-weight: 700; color: var(--ink); }
+  .badge { font-size: 14px; font-weight: 700; letter-spacing: .5px; color: #adbac7; background: #21262d; border: 1px solid var(--line); padding: 3px 10px; border-radius: 6px; }
+
+  /* form grid: [label] [control fills width] [24px trailing]. The fixed trailing
+     column keeps every input the same width (left AND right edges aligned),
+     whether or not its row carries a checkbox. */
+  .form { display: grid; grid-template-columns: auto 1fr 24px; column-gap: 16px; row-gap: 20px; align-items: center; }
+  .form label { font-family: var(--mono); font-size: 18px; color: var(--ink); }
+  .control { height: 44px; display: inline-flex; align-items: center; gap: 16px; padding: 0 15px;
+    background: #1c2128; border: 1px solid #30363d; border-radius: 8px; color: var(--ink); font-size: 18px; }
+  .control.input { width: 100%; }
+  .control.select { justify-self: start; }
+  .control .chev { color: var(--muted); font-size: 13px; }
+  .check { width: 24px; height: 24px; border-radius: 5px; background: #2f7bf6; color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+
+  .actions { display: flex; gap: 12px; margin-top: auto; }
+  .btn { font-size: 17px; font-weight: 600; padding: 11px 20px; border-radius: 8px; }
+  .btn.send { background: #2ea043; color: #fff; }
+  .btn.ghost { background: transparent; border: 1px solid #30363d; color: var(--ink); }
 </style>
 </head>
 <body>
@@ -116,14 +149,41 @@
     </div>
 
     <div class="right">
-      <div class="frame">
+      <div class="window">
         <div class="bar">
           <i></i><i></i><i></i>
           <span class="url">/apidocs</span>
         </div>
-        <div class="shot">
-          <div class="placeholder">drop <b style="color:#e6edf3">&nbsp;screenshot.png&nbsp;</b> here<br>(see capture recipe)</div>
-          <img src="social-card-screenshot.png" alt="" onerror="this.style.display='none'">
+        <div class="panel">
+          <div class="op">
+            <span class="method">POST</span>
+            <span class="path">/apidocs-demo/shapes</span>
+          </div>
+          <div class="tabs">
+            <span class="tab on">Try it out</span>
+            <span class="tab">Schema</span>
+          </div>
+          <div class="section">
+            <h4>Request body</h4>
+            <span class="badge">ONEOF</span>
+          </div>
+          <div class="form">
+            <label>Variant</label>
+            <span class="control select">circle <span class="chev">▼</span></span>
+            <span></span>
+
+            <label>kind</label>
+            <span class="control input">circle</span>
+            <span class="check">✓</span>
+
+            <label>radius</label>
+            <span class="control input">12</span>
+            <span></span>
+          </div>
+          <div class="actions">
+            <span class="btn send">Send</span>
+            <span class="btn ghost">Copy as cURL</span>
+          </div>
         </div>
       </div>
     </div>
