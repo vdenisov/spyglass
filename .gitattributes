@@ -13,3 +13,8 @@
 # gate rebuilds it and asserts `git diff --exit-code`. Exclude it from normalization so its
 # committed bytes stay identical to the build output (this rule wins over `*.js` above).
 *.bundle.js -text
+
+# The bundled third-party front-end libraries (CodeMirror, Vue, marked) are vendored, not
+# authored here. Exclude them from GitHub's language statistics so the breakdown reflects the
+# project's own code rather than the size of its dependencies.
+spyglass-core/src/main/resources/META-INF/resources/apidocs/vendor/** linguist-vendored
