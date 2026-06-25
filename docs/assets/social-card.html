@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spyglass social card</title>
+<style>
+  /* ----------------------------------------------------------------------
+     GitHub social preview is 1280x640 (2:1). The .card below is EXACTLY
+     that size. To export:
+       - Open in a browser, zoom to 200% for a crisp 2560x1280 capture,
+         OR screenshot the .card element directly with a devtools/CLI tool.
+       - Save as PNG and upload at: repo Settings -> Social preview.
+     Keep important text inside the 64px padding (some surfaces crop edges).
+     -------------------------------------------------------------------- */
+  :root {
+    --bg0: #0b1220;
+    --bg1: #0d1117;
+    --ink: #e6edf3;
+    --muted: #8b9bb0;
+    --accent: #34d4c4;     /* spyglass teal */
+    --accent-2: #38bdf8;
+    --line: rgba(255,255,255,.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1c2128;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .card {
+    position: relative;
+    width: 1280px; height: 640px;
+    background:
+      radial-gradient(1100px 600px at 78% -10%, rgba(56,189,248,.10), transparent 60%),
+      radial-gradient(900px 500px at 0% 110%, rgba(52,212,196,.10), transparent 55%),
+      linear-gradient(135deg, var(--bg0), var(--bg1));
+    color: var(--ink);
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 1fr 560px;
+  }
+
+  /* ---- Left: message ---- */
+  .left { padding: 64px; display: flex; flex-direction: column; justify-content: space-between; }
+
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand .name { font-size: 32px; font-weight: 700; letter-spacing: .2px; }
+
+  .eyebrow {
+    font-size: 15px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 18px;
+  }
+  /* HEADLINE — punchy / alternative-to (active). The descriptive variant is
+     kept commented in the markup below if you ever want to swap back. */
+  .punchy { font-size: 80px; line-height: 1.0; font-weight: 800; letter-spacing: -2.5px; }
+  .punchy .strike { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(255,90,90,.8); text-decoration-thickness: 5px; }
+  h1 {
+    font-size: 56px; line-height: 1.08; font-weight: 800; letter-spacing: -1px;
+    max-width: 600px;
+  }
+  h1 .hl { color: var(--accent); }
+
+  .sub { margin-top: 22px; font-size: 21px; line-height: 1.45; color: var(--muted); max-width: 520px; }
+
+  .trust { display: flex; align-items: center; gap: 12px; font-size: 16px; color: var(--muted); }
+  .trust .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--muted); opacity: .6; }
+  .trust b { color: var(--ink); font-weight: 600; }
+
+  /* ---- Right: product shot ---- */
+  .right { position: relative; }
+  .frame {
+    position: absolute; top: 76px; left: 0; right: -80px; bottom: 76px;
+    border: 1px solid var(--line); border-radius: 14px 0 0 14px;
+    background: #11161d;
+    box-shadow: -30px 30px 80px rgba(0,0,0,.45);
+    overflow: hidden;
+  }
+  .frame .bar {
+    height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 14px;
+    background: #0d1117; border-bottom: 1px solid var(--line);
+  }
+  .frame .bar i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .frame .bar i:nth-child(1){ background:#ff5f57 } .frame .bar i:nth-child(2){ background:#febc2e } .frame .bar i:nth-child(3){ background:#28c840 }
+  .frame .bar .url { margin-left: 12px; font-size: 13px; color: var(--muted); }
+  .shot { position: relative; height: calc(100% - 38px); }
+  .shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: left top; display: block; }
+  /* Placeholder shown until screenshot.png is dropped next to this file */
+  .shot .placeholder {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    text-align: center; color: var(--muted); font-size: 15px; line-height: 1.6;
+    background: repeating-linear-gradient(45deg, #11161d, #11161d 14px, #0f141b 14px, #0f141b 28px);
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="left">
+      <div class="brand">
+        <span class="name">Spyglass</span>
+      </div>
+
+      <div>
+        <div class="eyebrow">For Spring Boot</div>
+        <div class="punchy"><span class="strike">Swagger&nbsp;UI</span>,<br>replaced.</div>
+        <!-- Descriptive alternative (swap back if you ever want it):
+        <h1>The <span class="hl">no-build</span> OpenAPI explorer you embed in your own service.</h1>
+        -->
+        <p class="sub">An embeddable, no-build OpenAPI explorer for Spring Boot. One dependency, no npm.</p>
+      </div>
+
+      <div class="trust">
+        <span>Spring&nbsp;MVC&nbsp;+&nbsp;WebFlux</span><span class="dot"></span>
+        <span>Maven&nbsp;Central</span><span class="dot"></span>
+        <span>MIT</span>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="frame">
+        <div class="bar">
+          <i></i><i></i><i></i>
+          <span class="url">/apidocs</span>
+        </div>
+        <div class="shot">
+          <div class="placeholder">drop <b style="color:#e6edf3">&nbsp;screenshot.png&nbsp;</b> here<br>(see capture recipe)</div>
+          <img src="social-card-screenshot.png" alt="" onerror="this.style.display='none'">
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
