@@ -32,6 +32,11 @@ public class DemoEndpointsConfiguration {
         return new DemoController();
     }
 
+    @Bean
+    public HealthController healthController() {
+        return new HealthController();
+    }
+
     /**
      * Advertises the bundled sample front-end extension to the explorer via the spec's
      * {@code x-spyglass-extensions} info extension — the spec-advertised channel the docs teach, and the

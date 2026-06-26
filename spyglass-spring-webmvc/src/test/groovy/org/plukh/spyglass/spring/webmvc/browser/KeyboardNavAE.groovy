@@ -72,6 +72,27 @@ class KeyboardNavAE extends SpyglassSpecBase {
         assertThat(page.locator('.op-panel .op-header .op-path')).hasText('/measure')
     }
 
+    def "arrow navigation walks the ranked match sections top to bottom"() {
+        given: 'a filter that produces two sections (In path, then In summary)'
+        open()
+        page.keyboard().press('/')
+        page.locator('.sidebar .filter').fill('widget')
+
+        when: 'arrowing down from the filter enters the list at the first ranked row'
+        page.keyboard().press('ArrowDown')
+
+        then: 'the first path-section op opens'
+        assertThat(page.locator('.op-panel .op-header .op-path')).hasText('/widgets')
+
+        when: 'continuing down crosses out of the path section into the summary section'
+        page.keyboard().press('ArrowDown')
+        page.keyboard().press('ArrowDown')
+
+        then: 'the summary-section op is reached last, in flat order across sections'
+        assertThat(page.locator('.op-panel .op-header .op-path')).hasText('/composed')
+        assertThat(page.locator('.sidebar .op-link:focus .op-path')).hasText('/composed')
+    }
+
     def "the list shows its keyboard-active state only while it holds focus"() {
         given:
         open()
