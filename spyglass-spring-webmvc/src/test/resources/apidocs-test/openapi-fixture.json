@@ -334,6 +334,7 @@
     "/config": {
       "post": {
         "tags": ["Composed"],
+        "operationId": "saveConfigEnvelope",
         "summary": "Save a config envelope (fixed properties + additionalProperties)",
         "requestBody": {
           "content": {

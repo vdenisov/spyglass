@@ -22,8 +22,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -84,6 +87,28 @@ public class DemoController {
     @PostMapping("/shapes")
     public Shape createShape(@RequestBody Shape shape) {
         return shape;
+    }
+
+    @Operation(
+            summary = "Replace a shape (PUT + path parameter)",
+            description = "Demo — a full replace by id: a path parameter alongside the discriminated `oneOf` "
+                    + "body, echoing the updated shape back.")
+    @PutMapping("/shapes/{id}")
+    public Shape replaceShape(
+            @Parameter(description = "The id of the shape to replace.") @PathVariable("id") String id,
+            @RequestBody Shape shape) {
+        return shape;
+    }
+
+    @Operation(
+            summary = "Delete a shape (204 No Content)",
+            description = "Demo — deletes by id and returns an empty `204 No Content`, so Try It Out exercises "
+                    + "no-body response rendering.")
+    @ApiResponse(responseCode = "204", description = "The shape was deleted; no body is returned.")
+    @DeleteMapping("/shapes/{id}")
+    public ResponseEntity<Void> deleteShape(
+            @Parameter(description = "The id of the shape to delete.") @PathVariable("id") String id) {
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(

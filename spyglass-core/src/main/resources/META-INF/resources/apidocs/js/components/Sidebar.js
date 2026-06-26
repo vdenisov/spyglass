@@ -1,5 +1,76 @@
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onUpdated, onBeforeUnmount } from 'vue'
 import { VERSION } from '../version.js'
+
+// --- filter ranking ---------------------------------------------------------
+// While a filter is active the sidebar abandons tag grouping for a relevance-ranked, sectioned
+// list: each operation is bucketed under the single highest-precedence field it matched. path and
+// method matches are already visible in the row (highlighted in place); operationId and summary
+// matches aren't, so they're explained on a second line (operationId in full, summary windowed
+// around the match). Precedence is the MATCH_FIELDS order below.
+const MATCH_FIELDS = [
+  { key: 'path', label: 'In path', get: op => op.path },
+  { key: 'operationId', label: 'In operation ID', get: op => op.operationId },
+  { key: 'method', label: 'In method', get: op => op.method },
+  { key: 'summary', label: 'In summary', get: op => op.summary }
+]
+// Summary-snippet windowing. A matched summary is shown whole when it fits the snippet column; when
+// it's too long a window slides over it so the match stays visible near the right with a little
+// trailing margin, dropping the least head necessary (marked with a leading …). Both the column width
+// and the text width are *measured* with a canvas using the snippet's real font (see remeasure), not
+// estimated from an average glyph width — so it stays correct across fonts/zoom and trims smoothly as
+// the divider is dragged.
+const SNIPPET_TAIL_PX = 36          // trailing margin kept past the match when windowed, so it isn't
+                                    // flush against (or clipped by) the right edge
+
+// The first MATCH_FIELDS entry whose (lowercased) text contains the query, or null. f is assumed
+// already lowercased and non-empty.
+const classifyMatch = (op, f) => {
+  for (const field of MATCH_FIELDS) {
+    const text = field.get(op)
+    if (text && text.toLowerCase().includes(f)) return field
+  }
+  return null
+}
+
+// Split text at the first case-insensitive occurrence of f into highlight parts [{ t, mark }]. No
+// match (or empty f) yields a single plain part, so callers can always v-for the result and only
+// the { mark: true } part is wrapped in <mark>.
+const highlightParts = (text, f) => {
+  const i = f ? text.toLowerCase().indexOf(f) : -1
+  if (i < 0) return [{ t: text, mark: false }]
+  return [
+    { t: text.slice(0, i), mark: false },
+    { t: text.slice(i, i + f.length), mark: true },
+    { t: text.slice(i + f.length), mark: false }
+  ]
+}
+
+// Highlight parts for a summary snippet, windowed to fit width `px` using `ctx` (a canvas context
+// carrying the snippet's font). Collapses whitespace; shows the whole string when it fits (or when
+// measurement isn't ready yet, px 0); otherwise drops the least head so the match's right edge plus
+// SNIPPET_TAIL_PX still fits, prefixing … . f is assumed lowercased and present in the summary.
+const summaryParts = (summary, f, ctx, px) => {
+  const text = (summary || '').replace(/\s+/g, ' ').trim()
+  const i = text.toLowerCase().indexOf(f)
+  if (i < 0) return [{ t: text, mark: false }]
+  const end = i + f.length
+  const parts = (start) => [
+    { t: (start > 0 ? '…' : '') + text.slice(start, i), mark: false },
+    { t: text.slice(i, end), mark: true },
+    { t: text.slice(end), mark: false }
+  ]
+  if (!ctx || !px || ctx.measureText(text).width <= px) return parts(0)
+  // Too long: binary-search the smallest start (most lead) whose [start, end] still fits the budget,
+  // so the match stays visible; start moves one position at a time as px changes — a smooth trim.
+  const budgetPx = Math.max(0, px - SNIPPET_TAIL_PX)
+  let lo = 0, hi = i
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (ctx.measureText(text.slice(mid, end)).width <= budgetPx) hi = mid
+    else lo = mid + 1
+  }
+  return parts(lo)
+}
 
 // Lists operations grouped by tag with a live filter; emits `select` when one is chosen.
 // Keyboard model (consistent whether you arrive by typing or by clicking):
@@ -23,12 +94,27 @@ export default {
     const filter = ref('')
     const filterInput = ref(null)
     const rootEl = ref(null)
+    const q = computed(() => filter.value.trim().toLowerCase())
+    const filtering = computed(() => q.value.length > 0)
+    // Live measurement for summary-snippet windowing: the available width of a snippet box (reactive,
+    // so snippets re-window when it changes) and a canvas context carrying the snippet's real font.
+    // Refreshed on mount, on resize, and after renders that change the list (see remeasure / onUpdated).
+    const availPx = ref(0)
+    let measureCtx = null
+    const remeasure = () => {
+      const snip = rootEl.value && rootEl.value.querySelector('.op-snippet')
+      if (!snip) return
+      if (snip.clientWidth) availPx.value = snip.clientWidth
+      if (!measureCtx) {
+        measureCtx = document.createElement('canvas').getContext('2d')
+        const cs = getComputedStyle(snip)
+        measureCtx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
+      }
+    }
+    // Unfiltered view: every operation grouped by tag, tags sorted (ops keep spec order within a tag).
     const groups = computed(() => {
-      const f = filter.value.trim().toLowerCase()
       const map = new Map()
       for (const op of props.operations) {
-        if (f && !(op.path.toLowerCase().includes(f) || op.method.toLowerCase().includes(f) || op.summary.toLowerCase().includes(f)
-          || (op.operationId && op.operationId.toLowerCase().includes(f)))) continue
         for (const tag of op.tags) {
           if (!map.has(tag)) map.set(tag, [])
           map.get(tag).push(op)
@@ -36,10 +122,39 @@ export default {
       }
       return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([tag, ops]) => ({ tag, ops }))
     })
+    // Filtered view: each matching op ranked into one section by its highest-precedence matched
+    // field; sections emitted in MATCH_FIELDS (precedence) order, empties dropped, spec order kept
+    // within a section. Each row carries the field key so the template knows what to highlight.
+    const sections = computed(() => {
+      const f = q.value
+      if (!f) return []
+      const map = new Map()
+      for (const op of props.operations) {
+        const field = classifyMatch(op, f)
+        if (!field) continue
+        if (!map.has(field.key)) map.set(field.key, { key: field.key, label: field.label, rows: [] })
+        map.get(field.key).rows.push({ op, field: field.key })
+      }
+      return MATCH_FIELDS.map(field => map.get(field.key)).filter(Boolean)
+    })
 
-    // Flattened filtered order (matches DOM order across tag groups) for ↑/↓ navigation. activeIndex
-    // is the focus/highlight cursor; the op-link elements carry a roving tabindex so Tab lands on it.
-    const flatOps = computed(() => groups.value.flatMap(g => g.ops))
+    // Flattened active order (matches DOM order: ranked sections while filtering, else tag groups)
+    // for ↑/↓ navigation. activeIndex is the focus/highlight cursor; the op-link elements carry a
+    // roving tabindex so Tab lands on it.
+    const flatOps = computed(() => filtering.value
+      ? sections.value.flatMap(s => s.rows.map(r => r.op))
+      : groups.value.flatMap(g => g.ops))
+
+    // Highlight parts for a row's method/path — only the field that actually matched is highlighted;
+    // the other renders as a single plain part. The explanatory second line (snippetParts) is the
+    // windowed summary or the full operationId, or null for path/method matches (no snippet).
+    const methodParts = (row) => highlightParts(row.op.method, row.field === 'method' ? q.value : '')
+    const pathParts = (row) => highlightParts(row.op.path, row.field === 'path' ? q.value : '')
+    const snippetParts = (row) => {
+      if (row.field === 'operationId') return highlightParts(row.op.operationId, q.value)
+      if (row.field === 'summary') return summaryParts(row.op.summary, q.value, measureCtx, availPx.value)
+      return null
+    }
     const activeIndex = ref(0)
     const filterFocused = ref(false)
     const listFocused = ref(false)
@@ -160,15 +275,32 @@ export default {
       e.preventDefault()
       if (filterInput.value) { filterInput.value.focus(); filterInput.value.select() }
     }
-    onMounted(() => document.addEventListener('keydown', onGlobalKeydown))
-    onBeforeUnmount(() => document.removeEventListener('keydown', onGlobalKeydown))
+    // Re-measure the snippet column whenever it can change: on resize (divider drag — which fires no
+    // Vue render, hence the ResizeObserver) and after every render (a filter change adds/removes
+    // snippets). remeasure only writes availPx when it actually differs, so this doesn't loop.
+    let listRO = null
+    onMounted(() => {
+      document.addEventListener('keydown', onGlobalKeydown)
+      const list = rootEl.value && rootEl.value.querySelector('.op-list')
+      if (list && 'ResizeObserver' in window) {
+        listRO = new ResizeObserver(() => remeasure())
+        listRO.observe(list)
+      }
+      remeasure()
+    })
+    onUpdated(remeasure)
+    onBeforeUnmount(() => {
+      document.removeEventListener('keydown', onGlobalKeydown)
+      if (listRO) listRO.disconnect()
+    })
 
     // Spyglass's own version, build-injected (version.js). In an unfiltered checkout the literal token
     // survives — hide the version line rather than render it raw.
     const version = computed(() => VERSION.startsWith('@') ? '' : VERSION)
 
     return {
-      filter, filterInput, rootEl, groups, kbActive, isActiveIndex, isHighlighted, opLabel,
+      filter, filterInput, rootEl, filtering, groups, sections, flatOps, kbActive, isActiveIndex,
+      isHighlighted, opLabel, methodParts, pathParts, snippetParts,
       onFilterKeydown, onOpKeydown, choose, clearFilter, onFocusin, onFocusout, onSidebarMousedown, version
     }
   },
@@ -182,20 +314,39 @@ export default {
           aria-label="clear filter" v-tip="'Clear filter (Esc)'">✕</button>
       </div>
       <div class="op-list" role="listbox" aria-label="Operations" :class="{ 'kb-active': kbActive }">
-        <div v-for="grp in groups" :key="grp.tag" class="tag-group" role="group" :aria-label="grp.tag">
-          <div class="tag-name">{{ grp.tag }}</div>
-          <button v-for="op in grp.ops" :key="op.id" type="button" role="option"
-            :aria-selected="isHighlighted(op)" :tabindex="isActiveIndex(op) ? 0 : -1"
-            class="op-link" :class="['m-' + op.method.toLowerCase(), { active: isHighlighted(op), deprecated: op.deprecated }]"
-            :aria-label="opLabel(op)"
-            @click="choose(op)" @keydown="onOpKeydown" v-tip.hover="op.deprecated ? (op.summary + ' (deprecated)') : op.summary">
-            <span class="op-method">{{ op.method }}</span>
-            <span class="op-path">{{ op.path }}</span>
-            <span v-if="op.deprecated" class="dep-tag sidebar-dep">depr</span>
-          </button>
-        </div>
+        <template v-if="filtering">
+          <div v-for="sec in sections" :key="sec.key" class="match-group" role="group" :aria-label="sec.label">
+            <div class="match-name">{{ sec.label }}</div>
+            <button v-for="row in sec.rows" :key="row.op.id" type="button" role="option"
+              :aria-selected="isHighlighted(row.op)" :tabindex="isActiveIndex(row.op) ? 0 : -1"
+              class="op-link" :class="['m-' + row.op.method.toLowerCase(), { active: isHighlighted(row.op), deprecated: row.op.deprecated }]"
+              :aria-label="opLabel(row.op)"
+              @click="choose(row.op)" @keydown="onOpKeydown" v-tip.hover="row.op.deprecated ? (row.op.summary + ' (deprecated)') : row.op.summary">
+              <span class="op-line">
+                <span class="op-method"><template v-for="(p, k) in methodParts(row)" :key="k"><mark v-if="p.mark">{{ p.t }}</mark><template v-else>{{ p.t }}</template></template></span>
+                <span class="op-path"><template v-for="(p, k) in pathParts(row)" :key="k"><mark v-if="p.mark">{{ p.t }}</mark><template v-else>{{ p.t }}</template></template></span>
+                <span v-if="row.op.deprecated" class="dep-tag sidebar-dep">depr</span>
+              </span>
+              <span v-if="snippetParts(row)" class="op-snippet"><template v-for="(p, k) in snippetParts(row)" :key="k"><mark v-if="p.mark">{{ p.t }}</mark><template v-else>{{ p.t }}</template></template></span>
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <div v-for="grp in groups" :key="grp.tag" class="tag-group" role="group" :aria-label="grp.tag">
+            <div class="tag-name">{{ grp.tag }}</div>
+            <button v-for="op in grp.ops" :key="op.id" type="button" role="option"
+              :aria-selected="isHighlighted(op)" :tabindex="isActiveIndex(op) ? 0 : -1"
+              class="op-link" :class="['m-' + op.method.toLowerCase(), { active: isHighlighted(op), deprecated: op.deprecated }]"
+              :aria-label="opLabel(op)"
+              @click="choose(op)" @keydown="onOpKeydown" v-tip.hover="op.deprecated ? (op.summary + ' (deprecated)') : op.summary">
+              <span class="op-method">{{ op.method }}</span>
+              <span class="op-path">{{ op.path }}</span>
+              <span v-if="op.deprecated" class="dep-tag sidebar-dep">depr</span>
+            </button>
+          </div>
+        </template>
         <div v-if="loading" class="hint">Loading spec…</div>
-        <div v-else-if="!groups.length" class="hint">No operations match.</div>
+        <div v-else-if="!flatOps.length" class="hint">No operations match.</div>
       </div>
       <div class="sidebar-foot">
         <span class="foot-brand"><span class="foot-name">Spyglass</span> · OpenAPI Explorer</span>

@@ -165,8 +165,10 @@ body {
 .foot-version { font-family: var(--mono); }
 .foot-link { color: var(--accent); text-decoration: none; }
 .foot-link:hover { text-decoration: underline; }
-.tag-group { margin-top: 12px; min-width: 100%; width: max-content; }
-.tag-name {
+/* Both the unfiltered (tag) and filtered (matched-field) groupings share the same box: sized to
+   their widest row so a long path can scroll horizontally without clipping the selection bar. */
+.tag-group, .match-group { margin-top: 12px; min-width: 100%; width: max-content; }
+.tag-name, .match-name {
   font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
   color: var(--muted); padding: 4px 8px; font-weight: 600;
 }
@@ -190,6 +192,25 @@ body {
   text-align: center; padding: 2px 0; border-radius: 4px; color: var(--on-accent);
 }
 .op-link .op-path { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+
+/* Filtered view: a row stacks the method+path line above an optional match snippet, so the button
+   becomes a block with an inner flex line rather than a single flex row. */
+.match-group .op-link { display: block; }
+.op-line { display: flex; align-items: center; gap: 8px; }
+/* Second line explaining a summary/operationId match (text not otherwise visible in the row).
+   width:0 + min-width:100% keeps a long snippet from widening the column (which is sized by the
+   paths); the snippet then ellipsizes at that width and never wraps. */
+.op-snippet {
+  display: block; width: 0; min-width: 100%; margin-top: 2px;
+  color: var(--muted); font-size: 11px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Filter-match highlight: bold accent TEXT, no background tint. Weight + colour alone reads cleanly
+   and — unlike a tint — doesn't clash with the selection bar (itself --accent-weak). The coloured
+   method badge is already bold, so bold-on-bold wouldn't register there; it keeps a translucent dark
+   patch so a method match still stands out while the white badge text stays legible. */
+.op-link mark { background: none; color: var(--accent); font-weight: 700; padding: 0; }
+.op-method mark { background: rgba(0, 0, 0, .25); color: var(--on-accent); border-radius: 2px; padding: 0 1px; }
 
 .m-get .op-method, .method.m-get { background: var(--method-get); }
 .m-post .op-method, .method.m-post { background: var(--method-post); }
@@ -253,6 +274,14 @@ input[readonly] { background: var(--bg-alt); color: var(--muted); cursor: defaul
 .op-header { display: flex; align-items: center; gap: 10px; }
 .method { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--on-accent); padding: 3px 10px; border-radius: 5px; }
 .op-header .op-path { font-family: var(--mono); font-size: 16px; }
+/* Operation ID: a small, copyable identity line under the method/path header — a muted label plus a
+   monospace value. Shown only when the spec declares an operationId; it is also a filter field, so it
+   gets a clear, scannable home here. */
+.op-id { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 12px; }
+.op-id-label { color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-size: 11px; font-weight: 600; }
+.op-id-value { font-family: var(--mono); color: var(--text); }
+.op-id-copy { display: inline-flex; align-items: center; border: none; background: none; cursor: pointer; color: var(--accent); padding: 2px; border-radius: 4px; line-height: 0; }
+.op-id-copy:hover { background: var(--accent-weak); }
 /* The operation title is the panel's <h2>; keep it at body size (UA would blow it up). */
 .op-summary { font-size: 15px; font-weight: 600; margin: 10px 0 2px; }
 .op-desc { color: var(--muted); margin: 2px 0 8px; line-height: 1.45; }

@@ -72,6 +72,9 @@ export default {
     const response = computed(() => props.execState.response)
     const sending = computed(() => props.execState.sending)
     const { flag: copied, flash: flashCopied } = useFlash()
+    // A separate flash for the header's Operation ID copy, so its "Copied" cue is local and doesn't
+    // also trigger the send-bar's shared copy note.
+    const { flag: opIdCopied, flash: flashOpId } = useFlash()
     const tab = ref('try')
     const schemaView = ref('schema')
     // True while rebuild() is reseeding the form from a saved snapshot — suppresses the persist watcher
@@ -536,6 +539,10 @@ export default {
       if (await copyText(text)) flashCopied()
     }
 
+    const copyOpId = async () => {
+      if (await copyText(props.operation.operationId)) flashOpId()
+    }
+
     const sqEscape = (s) => String(s).replace(/'/g, "'\\''")
 
     const copyCurl = async () => {
@@ -585,7 +592,7 @@ export default {
     }
 
     return {
-      paramState, bodyTypes, mediaType, bodyMt, curKind, rebuildBody, bodyNode, bodySupported, useRaw, rawText, rawError, response, sending, cancel, copied,
+      paramState, bodyTypes, mediaType, bodyMt, curKind, rebuildBody, bodyNode, bodySupported, useRaw, rawText, rawError, response, sending, cancel, copied, opIdCopied, copyOpId,
       tab, schemaView, requestRef, responseRefs, statusClass, editorSchema, mdBlock,
       requestExamples, reqCanPrefill, responseExamples, paramExampleGroups, hasAnyExamples, prefillRaw, prefillParam,
       setRaw, prettyRaw, send, reset, copyCurl, copyHttp, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys
@@ -597,6 +604,19 @@ export default {
         <span class="method" :class="'m-' + operation.method.toLowerCase()">{{ operation.method }}</span>
         <span class="op-path">{{ operation.path }}</span>
       </header>
+      <div v-if="operation.operationId" class="op-id">
+        <span class="op-id-label">Operation ID</span>
+        <code class="op-id-value">{{ operation.operationId }}</code>
+        <button type="button" class="op-id-copy" @click="copyOpId" aria-label="Copy operation ID"
+          v-tip="'Copy operation ID'">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="9" width="13" height="13" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+        </button>
+        <span v-if="opIdCopied" class="copied-note" role="status">✓ Copied</span>
+      </div>
       <h2 v-if="operation.summary" class="op-summary">{{ operation.summary }}</h2>
       <div v-if="operation.deprecated" class="deprecated-banner">⚠ This operation is deprecated.</div>
       <div v-if="operation.description" class="op-desc" v-html="mdBlock(operation.description)"></div>
