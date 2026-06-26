@@ -663,19 +663,30 @@ export default {
 
         <div class="send-bar">
           <span class="send-cta">
-            <!-- One button that morphs: the green Send becomes a red Cancel while a request is in
-                 flight (same size/position, no reflow, focus kept), with progress shown in the caption. -->
-            <button class="btn-send" :class="{ 'btn-cancel': sending }" type="button"
-              v-tip="sending ? 'Cancel the in-flight request' : 'Send the request (' + sendHint + ')'"
-              @click="sending ? cancel() : send()">{{ sending ? 'Cancel' : 'Send' }}</button>
-            <span v-if="sending" class="sending-note" role="status">Sending…</span>
-            <span v-else class="kbd-hint" v-tip="'Keyboard shortcut to send the request'">{{ sendHint }}</span>
+            <!-- Send and Cancel are two distinct controls, not one morphing button. While a request is in
+                 flight Send is disabled (so a double-click can't fire a second action — and can never land
+                 on Cancel) and recedes to a quiet "Sending…" ghost rather than a bright fill, so a fast
+                 request doesn't flash. A separate outline Cancel appears beside it as the always-available
+                 unblock; whenever Send is disabled, Cancel is present. -->
+            <span class="send-row" role="status">
+              <button class="btn-send" type="button" :disabled="sending"
+                v-tip="sending ? 'Request in flight' : 'Send the request (' + sendHint + ')'"
+                @click="send">{{ sending ? 'Sending…' : 'Send' }}</button>
+              <button v-if="sending" class="btn-cancel" type="button"
+                v-tip="'Cancel the in-flight request'" @click="cancel">Cancel</button>
+            </span>
+            <span v-if="!sending" class="kbd-hint" v-tip="'Keyboard shortcut to send the request'">{{ sendHint }}</span>
           </span>
-          <button class="btn-mini" type="button" @click="copyCurl">Copy as cURL</button>
-          <button class="btn-mini" type="button" @click="copyHttp">Copy as JetBrains .http</button>
-          <button class="btn-mini danger btn-reset-op" type="button" @click="reset"
-            v-tip="'Reset this operation — clear its inputs, saved form, and last response'">Reset</button>
-          <span v-if="copied" class="copied-note" role="status">✓ Copied</span>
+          <!-- Form utilities (serialize / reset the current form) on their own row, kept clear of the
+               execute action below. The bar is column-reversed so this row sits on top visually while
+               Send stays first in DOM/tab order. -->
+          <div class="util-row">
+            <button class="btn-mini" type="button" @click="copyCurl">Copy as cURL</button>
+            <button class="btn-mini" type="button" @click="copyHttp">Copy as JetBrains .http</button>
+            <button class="btn-mini danger btn-reset-op" type="button" @click="reset"
+              v-tip="'Reset this operation — clear its inputs, saved form, and last response'">Reset</button>
+            <span v-if="copied" class="copied-note" role="status">✓ Copied</span>
+          </div>
         </div>
 
         <ResponseView v-if="response" :resp="response" :name="downloadName" />
