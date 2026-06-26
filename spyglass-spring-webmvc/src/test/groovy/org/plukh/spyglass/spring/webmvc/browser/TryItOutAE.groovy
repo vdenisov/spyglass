@@ -112,6 +112,20 @@ class TryItOutAE extends SpyglassSpecBase {
         page.locator('.btn-cancel').count() == 0
     }
 
+    def "double-clicking Send does not abort the request"() {
+        given: 'a route that never responds, so the request stays in flight'
+        page.route('**/widgets/**', ({ Route route -> /* held open: never fulfilled */ } as Consumer<Route>))
+        param('id').locator('.control input').fill('1')
+
+        when: 'Send is double-clicked'
+        page.dblclick('.btn-send')
+
+        then: 'Send is disabled while in flight, so click 2 is a no-op — the request runs, nothing is cancelled'
+        page.waitForSelector('.btn-cancel')          // a request is in flight (separate Cancel control shown)
+        assertThat(page.locator('.btn-send')).isDisabled()
+        page.locator('.response').count() == 0       // no "Request cancelled" — click 2 did not reach Cancel
+    }
+
     def "renders the response status, duration and body"() {
         given:
         param('id').locator('.control input').fill('1')
