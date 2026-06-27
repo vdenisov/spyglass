@@ -37,6 +37,59 @@ export function storageKey(suffix) {
   return `${CONFIG.storageNamespace}-${suffix}`
 }
 
+// Update-check configuration (see useUpdateCheck.js): on by default and conservative; a host disables
+// or retunes it without editing the jar. Resolved separately from CONFIG because one of its layers —
+// the spec's x-spyglass-config — isn't known until the spec loads, so App.js calls resolveUpdateCheckConfig
+// after loadSpec (the same point x-spyglass-extensions is merged).
+const UPDATE_CHECK_DEFAULTS = { enabled: true, intervalSeconds: 300, confirmWindowSeconds: 1800 }
+
+// Flat query-param overrides for the update check (params can't express nesting, hence flat names):
+//   ?updateCheck=off|false|0|no  -> disable; any other value -> enable
+//   ?updateCheckInterval=<seconds>, ?updateCheckWindow=<seconds>  -> the two timings
+// A timing param is taken only when it parses to a finite, strictly-positive number; unset, empty,
+// zero, negative, or non-numeric values are dropped so they fall back to a lower-priority layer rather
+// than producing a 0ms poll loop or a zero-length confirmation window. Sub-second positives (used by
+// tests) are intentionally allowed.
+function updateCheckFromParams() {
+  const out = {}
+  const flag = params.get('updateCheck')
+  if (flag != null) out.enabled = !/^(off|false|0|no)$/i.test(flag)
+  for (const [param, key] of [['updateCheckInterval', 'intervalSeconds'], ['updateCheckWindow', 'confirmWindowSeconds']]) {
+    const raw = params.get(param)
+    if (raw == null) continue
+    const n = Number(raw)
+    if (Number.isFinite(n) && n > 0) out[key] = n
+  }
+  return out
+}
+
+// Takes only the known update-check keys from a config layer (defends against an operator/spec passing
+// stray or wrong-typed fields). Timings must be finite and strictly positive — a 0/negative value (a
+// hot poll loop, or a window that surfaces on the first divergent poll) is dropped to the lower layer;
+// sub-second positives are allowed so a host or a test can use them deliberately.
+function pickUpdateCheck(layer) {
+  if (!layer || typeof layer !== 'object') return {}
+  const out = {}
+  if ('enabled' in layer) out.enabled = !!layer.enabled
+  if (Number.isFinite(layer.intervalSeconds) && layer.intervalSeconds > 0) out.intervalSeconds = layer.intervalSeconds
+  if (Number.isFinite(layer.confirmWindowSeconds) && layer.confirmWindowSeconds > 0) out.confirmWindowSeconds = layer.confirmWindowSeconds
+  return out
+}
+
+// Folds the update-check config layers, lowest priority first:
+//   defaults < spec info['x-spyglass-config'].updateCheck < window.SPYGLASS_CONFIG.updateCheck < query
+// Operator-supplied layers (global/query) win over the spec, mirroring the extension-list precedence.
+export function resolveUpdateCheckConfig(spec) {
+  const specConfig = spec && spec.info && spec.info['x-spyglass-config']
+  const specLayer = specConfig && typeof specConfig === 'object' ? specConfig.updateCheck : null
+  return {
+    ...UPDATE_CHECK_DEFAULTS,
+    ...pickUpdateCheck(specLayer),
+    ...pickUpdateCheck(overrides.updateCheck),
+    ...updateCheckFromParams()
+  }
+}
+
 // Whether a URL is same-origin: a relative path, or an absolute URL whose origin matches the page.
 // Used to gate two author-supplied-and-thus-less-trusted inputs against operator-supplied ones: the
 // ?spec= query param (above) and the spec's x-spyglass-extensions list — an absolute cross-origin URL

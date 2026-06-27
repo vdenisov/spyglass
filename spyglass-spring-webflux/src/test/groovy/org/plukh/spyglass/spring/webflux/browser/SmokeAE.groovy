@@ -1,5 +1,12 @@
 package org.plukh.spyglass.spring.webflux.browser
 
+import com.microsoft.playwright.Route
+import org.plukh.spyglass.test.SpecFixtures
+
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.function.Consumer
+
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
 
 /**
@@ -59,5 +66,42 @@ class SmokeAE extends SpyglassReactiveSpecBase {
         cap.url.contains('/widgets/42')
         assertThat(page.locator('.resp-status')).containsText('200')
         assertThat(respBody()).containsText('ok')
+    }
+
+    def "the update-check toast surfaces over the reactive stack when the spec changes"() {
+        given: 'the spec is served from a controllable body, baseline first'
+        def body = mockSpec(SpecFixtures.specWithVersion('1.0.0'))
+
+        when:
+        openWithUpdateCheck()
+        body.set(SpecFixtures.specWithVersion('2.0.0'))
+
+        then:
+        page.waitForSelector('.update-toast')
+    }
+
+    def "the spec probe sends If-None-Match and treats a 304 as unchanged over the reactive stack"() {
+        given: 'a host that answers a matching conditional spec poll with 304 (ShallowEtagHeaderFilter is servlet-only, so simulate it here)'
+        def etag = '"baseline-etag"'
+        def sawConditional = new AtomicBoolean(false)
+        def calls = new AtomicInteger(0)
+        page.route('**/v3/api-docs', ({ Route route ->
+            if (calls.incrementAndGet() == 1) {
+                route.fulfill(new Route.FulfillOptions().setStatus(200)
+                        .setHeaders(['content-type': 'application/json', 'etag': etag])
+                        .setBody(SpecFixtures.specWithVersion('1.0.0')))
+            } else {
+                if (etag == route.request().headers().get('if-none-match')) sawConditional.set(true)
+                route.fulfill(new Route.FulfillOptions().setStatus(304))
+            }
+        } as Consumer<Route>))
+
+        when:
+        openWithUpdateCheck()
+        page.waitForTimeout(1200)
+
+        then: 'the probe replayed the ETag and the unchanged 304 raised nothing'
+        sawConditional.get()
+        page.locator('.update-toast').count() == 0
     }
 }

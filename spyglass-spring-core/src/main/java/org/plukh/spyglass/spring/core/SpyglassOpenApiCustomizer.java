@@ -18,7 +18,12 @@ import org.springframework.util.StringUtils;
  *       can send a generated auth header;</li>
  *   <li>exposes {@code x-service-name} (the standard {@code spring.application.name}) as an
  *       {@code info} extension;</li>
- *   <li>sets a default title only when the consumer hasn't provided one.</li>
+ *   <li>sets a default title only when the consumer hasn't provided one;</li>
+ *   <li>fills {@code info.version} from the build version only when the consumer hasn't set a real one
+ *       (springdoc's {@code "v0"} placeholder counts as unset). This makes the spec carry a meaningful
+ *       version automatically, and gives the explorer's update check a value that changes per build — see
+ *       {@code SpyglassCoreConfiguration}, which sources it from {@code BuildProperties} and lets a
+ *       consumer disable it.</li>
  * </ul>
  *
  * <p>This is the vendor-neutral core customizer; consumer-specific {@code info} extensions
@@ -40,10 +45,21 @@ public class SpyglassOpenApiCustomizer implements OpenApiCustomizer {
     /** springdoc's placeholder title when none is configured; treated as "no title set". */
     private static final String SPRINGDOC_DEFAULT_TITLE = "OpenAPI definition";
 
+    /** springdoc's placeholder version when none is configured; treated as "no version set". */
+    private static final String SPRINGDOC_DEFAULT_VERSION = "v0";
+
     private final String applicationName;
 
+    /** The build version to fill into {@code info.version} when it's unset, or {@code null} to leave it. */
+    private final String buildVersion;
+
     public SpyglassOpenApiCustomizer(String applicationName) {
+        this(applicationName, null);
+    }
+
+    public SpyglassOpenApiCustomizer(String applicationName, String buildVersion) {
         this.applicationName = applicationName;
+        this.buildVersion = buildVersion;
     }
 
     @Override
@@ -58,6 +74,14 @@ public class SpyglassOpenApiCustomizer implements OpenApiCustomizer {
         if (!StringUtils.hasText(info.getTitle()) || SPRINGDOC_DEFAULT_TITLE.equals(info.getTitle())) {
             var name = applicationName == null ? "" : applicationName.strip();
             info.setTitle(name.isEmpty() ? "API" : name + " API");
+        }
+        // Fill the version from the build only when the consumer hasn't set a real one (springdoc
+        // pre-fills "v0", treated as unset). Never overwrites an explicit API version — a consumer that
+        // versions their contract keeps it. When present, it changes per build, so the explorer's update
+        // check has a value that moves on each release even if no endpoints changed.
+        if (StringUtils.hasText(buildVersion)
+                && (!StringUtils.hasText(info.getVersion()) || SPRINGDOC_DEFAULT_VERSION.equals(info.getVersion()))) {
+            info.setVersion(buildVersion);
         }
         // Expose the service name only when we actually have one, and never overwrite a value the
         // consumer (or an earlier customizer run) already set.

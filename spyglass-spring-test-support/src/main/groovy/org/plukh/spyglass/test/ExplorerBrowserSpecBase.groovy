@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value
 import spock.lang.Shared
 import spock.lang.Specification
 
+import java.util.concurrent.atomic.AtomicReference
 import java.util.function.Consumer
 
 /**
@@ -64,6 +65,14 @@ abstract class ExplorerBrowserSpecBase extends Specification {
     }
 
     def cleanup() {
+        // The update-check timer keeps polling /v3/api-docs in the background; stop that before tearing the
+        // context down (drop the route mocks, then unload the document) so a poll still in flight can't
+        // fulfill against a closing target and surface a spurious TargetClosedError at close().
+        try {
+            page?.unrouteAll()
+            page?.navigate('about:blank')
+        } catch (ignored) {
+        }
         context?.close()
     }
 
@@ -77,6 +86,39 @@ abstract class ExplorerBrowserSpecBase extends Specification {
             page.waitForSelector('.op-panel')
         }
         page
+    }
+
+    // ---- update-check helpers (shared by the webmvc + webflux specs) ----------
+
+    /** Sub-second poll interval + confirmation window so update-check specs don't wait real minutes. */
+    protected static final String UPDATE_CHECK_FAST = 'updateCheckInterval=0.15&updateCheckWindow=0.3'
+
+    /** Opens the explorer with the update check enabled at the given query timings (default: fast). */
+    protected Page openWithUpdateCheck(String query = UPDATE_CHECK_FAST) {
+        page.navigate('/apidocs/index.html?' + query)
+        page.waitForSelector('.sidebar .op-link')
+        page
+    }
+
+    /** A 200 application/json fulfillment for a mocked spec response. */
+    protected static Route.FulfillOptions jsonFulfill(String body) {
+        new Route.FulfillOptions().setStatus(200).setContentType('application/json').setBody(body)
+    }
+
+    /**
+     * Routes {@code /v3/api-docs} to always serve the returned reference's current body; mutate the
+     * reference to simulate a spec change on the next poll.
+     */
+    protected AtomicReference<String> mockSpec(String initialBody) {
+        def body = new AtomicReference<String>(initialBody)
+        page.route('**/v3/api-docs', ({ Route route -> route.fulfill(jsonFulfill(body.get())) } as Consumer<Route>))
+        body
+    }
+
+    /** Asserts the update toast does not appear within the given window (a negative, timing-based check). */
+    protected void noToastWithin(int ms) {
+        page.waitForTimeout(ms)
+        assert page.locator('.update-toast').count() == 0
     }
 
     /**
