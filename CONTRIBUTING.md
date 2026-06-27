@@ -33,13 +33,20 @@ both.
 
 ## Tests
 
-- **Unit / slice specs** (Spock) run in the default build (`*Spec` / `*Test`).
+- **Unit / slice specs** (Spock) run in the default build on surefire (`*Spec` / `*Test`).
 - **Browser specs** are named `*AE` (short for "API Explorer") and drive the explorer with
-  Playwright. The `*AE` naming keeps them out of the default surefire/failsafe patterns; run them with:
+  Playwright. They run by default as part of `verify` (on failsafe); a plain build runs both:
 
   ```bash
-  mvn verify -Papidocs-tests            # default leg
-  mvn -Pboot4 verify -Papidocs-tests    # boot4 leg
+  mvn verify            # default leg: unit + browser specs
+  mvn -Pboot4 verify    # boot4 leg:   unit + browser specs
+  ```
+
+  Skipping the browser specs is the explicit opt-out — useful for a quick or offline build that
+  can't download the Chromium binary:
+
+  ```bash
+  mvn verify -DskipBrowserTests=true
   ```
 
   Playwright is an ordinary test dependency, so the specs are IDE-runnable. They need the Chromium
@@ -81,8 +88,8 @@ Use **Unix (LF)** line endings and **UTF-8** for all text files, including gener
 ## Pull requests
 
 - Keep changes focused; match the surrounding code's style and comment density.
-- Run both build legs (and `-Papidocs-tests` if you touched the explorer or an adapter) before
-  submitting.
+- Run both build legs before submitting (`mvn verify` and `mvn -Pboot4 verify`); both run the
+  browser specs by default.
 - Update the relevant `docs/` page when you change configuration, the extension seam, or the adapter
   contract.
 
