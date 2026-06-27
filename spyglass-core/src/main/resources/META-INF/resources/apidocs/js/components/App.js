@@ -35,7 +35,10 @@ export default {
     // another; returning to the operation shows its in-flight-or-completed state. Responses are
     // deliberately never persisted (they can be large or sensitive — see opForm.js).
     const opStates = reactive({})
-    const execStateFor = (op) => (opStates[op.id] ||= { sending: false, response: null, inflight: null, seq: 0 })
+    // `showCancel` gates the in-flight Cancel affordance (revealed only after a send stays in flight past
+    // a short debounce — see OperationPanel.js) and, like `sending`, lives on the slice so it survives
+    // operation switches; `cancelTimer` is the pending debounce timer so it can be cleared.
+    const execStateFor = (op) => (opStates[op.id] ||= { sending: false, response: null, inflight: null, seq: 0, showCancel: false, cancelTimer: null })
     // Resolve the current operation's slice off the render path (creating it lazily here, in a watcher,
     // rather than in the template, avoids mutating reactive state during render).
     const currentExec = ref(null)
