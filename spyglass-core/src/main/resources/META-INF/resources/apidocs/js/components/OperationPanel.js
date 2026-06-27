@@ -15,6 +15,12 @@ const JsonEditor = defineAsyncComponent(() => import('./JsonEditor.js'))
 
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
+// How long a send must stay in flight before the Cancel control (and the greyed "Sending…" Send) is
+// revealed. Below this the request almost always completes, so a fast request shows no flashed Cancel
+// and no Send→grey morph; it is also short enough that a user can't realistically click Cancel within
+// it (well under human move-and-click reaction time), so nothing cancellable is hidden in practice.
+const CANCEL_DEBOUNCE_MS = 250
+
 function controlFor(schema) {
   if (!schema) return { control: 'text', placeholder: 'string' }
   if (Array.isArray(schema.enum)) return { control: 'enum', options: schema.enum }
@@ -71,6 +77,10 @@ export default {
     // expose read-only views so the template and shortcut handler are unchanged.
     const response = computed(() => props.execState.response)
     const sending = computed(() => props.execState.sending)
+    // True once a send has been in flight past CANCEL_DEBOUNCE_MS (and still is): gates the Cancel
+    // control and the greyed "Sending…" Send. Lives on the execState slice (like `sending`) so it
+    // survives operation switches. See armCancelTimer and the send-bar template below.
+    const showCancel = computed(() => props.execState.showCancel)
     const { flag: copied, flash: flashCopied } = useFlash()
     // A separate flash for the header's Operation ID copy, so its "Copied" cue is local and doesn't
     // also trigger the send-bar's shared copy note.
@@ -422,6 +432,15 @@ export default {
     // take minutes) and so a request keeps running, addressable, across operation switches.
     const cancel = () => { const c = props.execState.inflight; if (c) c.abort() }
 
+    // Arm the timer that reveals the Cancel control CANCEL_DEBOUNCE_MS after a send starts. The seq guard
+    // stops a superseded send's pending timer from re-showing Cancel over a newer call.
+    const clearCancelTimer = (es) => { if (es.cancelTimer) { clearTimeout(es.cancelTimer); es.cancelTimer = null } }
+    const armCancelTimer = (es, mySeq) => {
+      clearCancelTimer(es)
+      es.showCancel = false
+      es.cancelTimer = setTimeout(() => { es.cancelTimer = null; if (es.seq === mySeq) es.showCancel = true }, CANCEL_DEBOUNCE_MS)
+    }
+
     const send = async () => {
       rawError.value = ''
       let req
@@ -445,6 +464,7 @@ export default {
       es.inflight = ctrl
       es.sending = true
       es.response = null
+      armCancelTimer(es, mySeq)
       try {
         const t0 = performance.now()
         const res = await fetch(req.relUrl, { method: req.method, headers: req.headers, body: req.bodyData || req.bodyStr, signal: ctrl.signal })
@@ -480,7 +500,7 @@ export default {
         else es.response = { status: '—', statusText: '', ok: false, networkError: e.message }
       } finally {
         if (es.inflight === ctrl) es.inflight = null
-        if (es.seq === mySeq) es.sending = false
+        if (es.seq === mySeq) { es.sending = false; clearCancelTimer(es); es.showCancel = false }
       }
     }
 
@@ -493,12 +513,15 @@ export default {
       es.seq++
       es.inflight = null
       es.sending = false
+      clearCancelTimer(es)
+      es.showCancel = false
       es.response = null
       removeForm(props.operation.id)
       rebuild({ fresh: true })
     }
 
     onBeforeUnmount(cancel)
+    onBeforeUnmount(() => clearCancelTimer(props.execState))
     onBeforeUnmount(() => flushSave(props.operation))
 
     // Ctrl/Cmd+Enter executes the request from anywhere on the operation. A capture-phase listener
@@ -595,7 +618,8 @@ export default {
       paramState, bodyTypes, mediaType, bodyMt, curKind, rebuildBody, bodyNode, bodySupported, useRaw, rawText, rawError, response, sending, cancel, copied, opIdCopied, copyOpId,
       tab, schemaView, requestRef, responseRefs, statusClass, editorSchema, mdBlock,
       requestExamples, reqCanPrefill, responseExamples, paramExampleGroups, hasAnyExamples, prefillRaw, prefillParam,
-      setRaw, prettyRaw, send, reset, copyCurl, copyHttp, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys
+      setRaw, prettyRaw, send, reset, copyCurl, copyHttp, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys,
+      showCancel
     }
   },
   template: `
@@ -683,16 +707,19 @@ export default {
 
         <div class="send-bar">
           <span class="send-cta">
-            <!-- Send and Cancel are two distinct controls, not one morphing button. While a request is in
-                 flight Send is disabled (so a double-click can't fire a second action — and can never land
-                 on Cancel) and recedes to a quiet "Sending…" ghost rather than a bright fill, so a fast
-                 request doesn't flash. A separate outline Cancel appears beside it as the always-available
-                 unblock; whenever Send is disabled, Cancel is present. -->
+            <!-- Send and Cancel are two distinct controls, not one morphing button. On click Send is
+                 disabled at once (so a double-click can't fire a second action — and can never land on
+                 Cancel) but holds its green look. Only if the request is still in flight past the debounce
+                 (CANCEL_DEBOUNCE_MS — see showCancel) does Send recede to a quiet "Sending…" ghost and a
+                 separate outline Cancel appear beside it. A fast request settles within the debounce, so
+                 it shows neither the grey morph nor a flashed Cancel. The pre-cancel class keeps Send
+                 green while disabled in that pre-debounce window. -->
             <span class="send-row" role="status">
               <button class="btn-send" type="button" :disabled="sending"
+                :class="{ 'pre-cancel': sending && !showCancel }"
                 v-tip="sending ? 'Request in flight' : 'Send the request (' + sendHint + ')'"
-                @click="send">{{ sending ? 'Sending…' : 'Send' }}</button>
-              <button v-if="sending" class="btn-cancel" type="button"
+                @click="send">{{ showCancel ? 'Sending…' : 'Send' }}</button>
+              <button v-if="showCancel" class="btn-cancel" type="button"
                 v-tip="'Cancel the in-flight request'" @click="cancel">Cancel</button>
             </span>
             <span v-if="!sending" class="kbd-hint" v-tip="'Keyboard shortcut to send the request'">{{ sendHint }}</span>

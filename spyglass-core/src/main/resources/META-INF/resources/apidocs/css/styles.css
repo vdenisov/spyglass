@@ -651,11 +651,15 @@ h3 { margin: 18px 0 8px; font-size: 13px; }
 }
 /* Pinned width so the label swap Send → Sending… doesn't resize the button. */
 .btn-send { background: var(--method-get); color: var(--on-accent); min-width: 7rem; text-align: center; }
-/* In flight, Send recedes to a quiet disabled "Sending…" ghost (no bright fill) so a fast request
-   doesn't flash; the inset box-shadow draws the border without changing the button's size. */
+/* Once a request has been in flight past the debounce, Send recedes to a quiet disabled "Sending…" ghost
+   (no bright fill); the inset box-shadow draws the border without changing the button's size. */
 .btn-send:disabled { cursor: default; background: var(--bg-alt); color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
-/* Separate, deliberately low-key Cancel shown beside the disabled Send while a request is in flight.
-   An outline (not a solid red slab) keeps it from flashing on short requests; it fills in on hover. */
+/* Before the debounce elapses Send is already disabled but keeps its full green look — a request that
+   settles within the window shows no grey morph and no Cancel, so a fast request never flashes.
+   Overrides the grey .btn-send:disabled above. */
+.btn-send.pre-cancel:disabled { cursor: default; background: var(--method-get); color: var(--on-accent); box-shadow: none; }
+/* Separate, deliberately low-key Cancel shown beside the disabled Send once a request outlasts the
+   debounce. An outline (not a solid red slab) keeps it from flashing; it fills in on hover. */
 .btn-cancel { background: transparent; color: var(--method-delete); box-shadow: inset 0 0 0 1px var(--method-delete); }
 .btn-cancel:hover { background: var(--method-delete); color: var(--on-accent); }
 
