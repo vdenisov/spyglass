@@ -5,6 +5,13 @@ spring:
 
 server:
   port: 8080
+  # Compress the cold-load payloads — the OpenAPI document and the explorer's JS/CSS assets. The
+  # default mime-types already cover text/javascript, application/javascript and application/json, and
+  # the default 2 KB min-response-size leaves tiny files uncompressed (not worth the CPU). Conditional
+  # 304s are unaffected (an empty body isn't compressed). Recommended for consumers too — see
+  # docs/configuration.md.
+  compression:
+    enabled: true
 
 apidocs:
   demo:

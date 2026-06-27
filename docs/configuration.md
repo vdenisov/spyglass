@@ -113,3 +113,47 @@ and applies only when that module is on the classpath:
   an extension that adds those features.
 
 A consuming service therefore only sets the properties of the modules it actually depends on.
+
+## Serving the explorer efficiently
+
+The explorer is a no-build, hand-written ES-module graph (~30 files) served with `Cache-Control:
+no-cache` + a content-ETag, so a warm load is dominated by **round-trips** (conditional `304`s), and a
+cold load by **bytes** (the CodeMirror vendor bundle alone is ~685 KB). Two server-side levers help;
+neither requires any change to the explorer.
+
+### Compression (cold-load bytes)
+
+Enable response compression so the OpenAPI document and the JS/CSS assets travel gzipped:
+
+```yaml
+server:
+  compression:
+    enabled: true
+```
+
+The default `mime-types` already cover `application/json`, `text/javascript` and
+`application/javascript`, and the default 2 KB `min-response-size` leaves tiny files uncompressed. This
+shrinks the vendor bundles substantially (CodeMirror ~685 KB → ~150 KB gzipped) and every spec fetch.
+It composes with the `/apidocs/**` ETag policy — a conditional `304` has no body to compress, so warm
+loads are unaffected; this is purely a cold-load win. (Spyglass serves the assets with a **weak** ETag
+precisely so they stay compressible — many servers, Tomcat included, refuse to gzip a strong-ETag
+response.)
+
+### HTTP/2 (warm-load round-trips)
+
+A warm load makes ~30 conditional requests, so it is sensitive to HTTP/1.1's per-origin connection
+limit. HTTP/2 multiplexes them over one connection and is the dominant warm-load lever. Two deployment
+shapes:
+
+- **(a) Behind a TLS-terminating proxy / load balancer / CDN** — these usually already speak HTTP/2 to
+  the browser regardless of the protocol used to the backend. Nothing to do.
+- **(b) Serving the Spring app directly** (no such front) — the app speaks HTTP/1.1, so the asset
+  requests are connection-limited. Enable HTTP/2 on the app (requires TLS):
+
+  ```yaml
+  server:
+    http2:
+      enabled: true
+  ```
+
+  or put an HTTP/2-capable proxy in front.

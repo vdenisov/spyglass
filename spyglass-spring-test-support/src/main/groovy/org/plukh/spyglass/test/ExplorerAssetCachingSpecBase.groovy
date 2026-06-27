@@ -22,14 +22,16 @@ abstract class ExplorerAssetCachingSpecBase extends Specification {
     @Value('${local.server.port}')
     int port
 
-    def "explorer assets are served with no-cache and a content ETag, but no Last-Modified"() {
+    def "explorer assets are served with no-cache and a weak content ETag, but no Last-Modified"() {
         when:
         def conn = get('/apidocs/js/app.js')
 
         then:
         conn.responseCode == 200
         conn.getHeaderField('Cache-Control') == 'no-cache'
-        conn.getHeaderField('ETag')
+        // A weak validator (W/"...") on purpose: it still drives revalidation, but lets a fronting server
+        // gzip the asset (a strong ETag would block compression). See ExplorerAssets for the why.
+        conn.getHeaderField('ETag') ==~ /W\/".+"/
         conn.getHeaderField('Last-Modified') == null
     }
 
