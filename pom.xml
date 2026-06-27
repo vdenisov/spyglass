@@ -4,7 +4,7 @@
 
     <groupId>org.plukh.spyglass</groupId>
     <artifactId>spyglass-parent</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Spyglass (parent)</name>
@@ -93,7 +93,7 @@
             release date when cutting a release; a stale value only affects archive entry timestamps,
             not behaviour.
         -->
-        <project.build.outputTimestamp>2026-06-27T17:53:04Z</project.build.outputTimestamp>
+        <project.build.outputTimestamp>2026-06-27T18:42:10Z</project.build.outputTimestamp>
     </properties>
 
     <dependencyManagement>
