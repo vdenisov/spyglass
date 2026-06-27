@@ -65,6 +65,14 @@ abstract class ExplorerBrowserSpecBase extends Specification {
     }
 
     def cleanup() {
+        // The update-check timer keeps polling /v3/api-docs in the background; stop that before tearing the
+        // context down (drop the route mocks, then unload the document) so a poll still in flight can't
+        // fulfill against a closing target and surface a spurious TargetClosedError at close().
+        try {
+            page?.unrouteAll()
+            page?.navigate('about:blank')
+        } catch (ignored) {
+        }
         context?.close()
     }
 
