@@ -37,6 +37,21 @@
       }
     }
   </script>
+  <!--
+    Flatten the module import waterfall on warm loads. This is a hand-written, non-bundled ES-module
+    graph, so without hints the browser discovers each level only after the previous one parses
+    (index.html -> app.js -> App.js -> spec.js / panels). These modulepreload hints kick off the hot
+    critical-path modules in parallel up front. Deliberately a small static list of the deepest,
+    most-blocking nodes (plus the vue runtime) — preloading the whole graph would defeat prioritisation.
+    Same-origin module fetches default to same-origin credentials, which matches modulepreload, so no
+    crossorigin attribute is needed and the preloaded response is reused (not re-fetched).
+  -->
+  <link rel="modulepreload" href="js/app.js">
+  <link rel="modulepreload" href="js/components/App.js">
+  <link rel="modulepreload" href="js/spec.js">
+  <link rel="modulepreload" href="js/components/Sidebar.js">
+  <link rel="modulepreload" href="js/components/OperationPanel.js">
+  <link rel="modulepreload" href="vendor/vue.esm-browser.prod.js">
 </head>
 <body>
   <div id="app"></div>

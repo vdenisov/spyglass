@@ -32,6 +32,15 @@ import java.util.function.Function;
  * {@code Last-Modified}), so a timestamp validator would report {@code 304} even after the JS changed.
  * Hashing the bytes is immune to that, which is also why the caller disables {@code Last-Modified}
  * outright rather than relying on the ETag merely out-ranking it.
+ *
+ * <p><strong>Why the ETag is weak ({@code W/"…"}).</strong> The validator is emitted as a <em>weak</em>
+ * ETag so a fronting server may apply content-coding (gzip) to the asset. A <em>strong</em> ETag asserts
+ * byte-for-byte equality of the representation, so Tomcat (and other servers) refuse to compress a
+ * strong-ETag response — gzip changes the bytes — which would leave the largest assets (the ~685 KB
+ * CodeMirror bundle) uncompressed on the wire. A weak ETag asserts only semantic equivalence, which is
+ * exactly right here: the gzipped and identity encodings are the same resource, and conditional
+ * revalidation uses the weak comparison function regardless, so {@code 304}s are unaffected. The explorer
+ * issues no {@code Range} requests on these assets (the one place strong/weak actually differs).
  */
 public final class ExplorerAssets {
 
@@ -83,11 +92,13 @@ public final class ExplorerAssets {
     }
 
     /**
-     * A content-based ETag generator: the MD5 of the asset's bytes, so the validator changes if and only
-     * if the content does. The hash is {@link #ETAG_CACHE memoised} per asset (re-hashed only when the
-     * resource's last-modified time changes) so it isn't recomputed on every revalidation. Returns
-     * {@code null} when the resource can't be read, which simply omits the ETag for that response (it is
-     * then re-fetched, and not memoised, rather than risk being served stale).
+     * A content-based ETag generator: a {@link org.springframework.http.ETag weak} validator
+     * ({@code W/"<md5>"}) over the asset's bytes, so it changes if and only if the content does (and stays
+     * weak so the asset remains gzip-compressible — see the class javadoc). The value is
+     * {@link #ETAG_CACHE memoised} per asset (recomputed only when the resource's last-modified time
+     * changes) so it isn't rehashed on every revalidation. Returns {@code null} when the resource can't be
+     * read, which simply omits the ETag for that response (it is then re-fetched, and not memoised, rather
+     * than risk being served stale).
      *
      * @return the ETag generator function
      */
@@ -97,32 +108,33 @@ public final class ExplorerAssets {
             try {
                 lastModified = resource.lastModified();
             } catch (IOException ex) {
-                // Can't stat the resource for a cache key; hash it directly (uncached) this time.
-                return hash(resource);
+                // Can't stat the resource for a cache key; compute it directly (uncached) this time.
+                return weakEtag(resource);
             }
             CachedEtag cached = ETAG_CACHE.get(resource.getDescription());
             if (cached != null && cached.lastModified() == lastModified) {
-                return cached.hash();
+                return cached.etag();
             }
-            String hash = hash(resource);
+            String etag = weakEtag(resource);
             // Overwrite (keyed on identity, not identity+time) so the map stays bounded to one entry per
             // asset even across repeated dev edits. Don't memoise a failed read, so it's retried next time.
-            if (hash != null) {
-                ETAG_CACHE.put(resource.getDescription(), new CachedEtag(lastModified, hash));
+            if (etag != null) {
+                ETAG_CACHE.put(resource.getDescription(), new CachedEtag(lastModified, etag));
             }
-            return hash;
+            return etag;
         };
     }
 
-    private static String hash(Resource resource) {
+    private static String weakEtag(Resource resource) {
         try (InputStream in = resource.getInputStream()) {
-            return DigestUtils.md5DigestAsHex(in);
+            // The "W/" prefix is preserved verbatim by Spring's ETag formatting, yielding a weak validator.
+            return "W/\"" + DigestUtils.md5DigestAsHex(in) + "\"";
         } catch (IOException ex) {
             return null;
         }
     }
 
-    /** A memoised ETag: the content {@code hash} and the {@code lastModified} time it was computed for. */
-    private record CachedEtag(long lastModified, String hash) {
+    /** A memoised ETag: the formatted {@code etag} value and the {@code lastModified} time it was computed for. */
+    private record CachedEtag(long lastModified, String etag) {
     }
 }
