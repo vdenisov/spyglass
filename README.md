@@ -140,7 +140,7 @@ The springdoc compatibility seam targets the springdoc-**common** `OpenApiCustom
 
 ## Status
 
-**1.0.0 is released** and available on Maven Central. Semantic versioning applies from here: the public
+**Released** and available on Maven Central. Semantic versioning applies: the public
 surface (entry points, `apidocs.*` properties, `config.js` precedence, the `x-*` extension names) stays
 stable across the 1.x line.
 
