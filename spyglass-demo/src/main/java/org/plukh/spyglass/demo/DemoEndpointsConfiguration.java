@@ -2,6 +2,7 @@ package org.plukh.spyglass.demo;
 
 import io.swagger.v3.oas.models.info.Info;
 import java.util.List;
+import java.util.Map;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -26,6 +27,9 @@ public class DemoEndpointsConfiguration {
 
     /** The same-origin path the sample extension is served from (META-INF/resources). */
     private static final String DEMO_EXTENSION = "/spyglass-ext/demo/index.js";
+
+    /** The demo's update-check poll interval (seconds): hourly, vs the library's conservative 300s default. */
+    private static final int DEMO_UPDATE_CHECK_INTERVAL_SECONDS = 3600;
 
     @Bean
     public DemoController demoController() {
@@ -58,6 +62,30 @@ public class DemoEndpointsConfiguration {
             var info = openApi.getInfo();
             if (info.getExtensions() == null || !info.getExtensions().containsKey("x-spyglass-extensions")) {
                 info.addExtension("x-spyglass-extensions", List.of(DEMO_EXTENSION));
+            }
+        };
+    }
+
+    /**
+     * Sets the demo's update-check poll interval to one hour via the spec's {@code x-spyglass-config}
+     * info extension — the operator-supplied config channel the explorer reads (see the front-end update
+     * check). The library default stays the conservative 300s for real consumers; the demo's spec changes
+     * only on redeploy, so hourly is ample and a short visit then makes no extra polls, while still
+     * showcasing both the config seam and the feature (the toast appears naturally after a demo redeploy).
+     *
+     * <p>Additive and idempotent in the same way as {@link #demoExtensionCustomizer()}: a check-then-act
+     * guard leaves any {@code x-spyglass-config} a prior customizer set in place.
+     */
+    @Bean
+    public OpenApiCustomizer demoUpdateCheckCustomizer() {
+        return openApi -> {
+            if (openApi.getInfo() == null) {
+                openApi.setInfo(new Info());
+            }
+            var info = openApi.getInfo();
+            if (info.getExtensions() == null || !info.getExtensions().containsKey("x-spyglass-config")) {
+                info.addExtension("x-spyglass-config",
+                        Map.of("updateCheck", Map.of("intervalSeconds", DEMO_UPDATE_CHECK_INTERVAL_SECONDS)));
             }
         };
     }

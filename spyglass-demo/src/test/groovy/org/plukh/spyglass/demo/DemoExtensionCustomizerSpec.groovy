@@ -39,4 +39,32 @@ class DemoExtensionCustomizerSpec extends Specification {
         then:
         openApi.info.extensions['x-spyglass-extensions'] == ['/already/there.js']
     }
+
+    def updateCheckCustomizer = new DemoEndpointsConfiguration().demoUpdateCheckCustomizer()
+
+    def "sets the hourly update-check interval via x-spyglass-config, creating info when absent"() {
+        given: 'a freshly generated document with no info yet'
+        def openApi = new OpenAPI()
+        openApi.info = null
+
+        when:
+        updateCheckCustomizer.customise(openApi)
+
+        then:
+        openApi.info != null
+        openApi.info.extensions['x-spyglass-config'] == [updateCheck: [intervalSeconds: 3600]]
+    }
+
+    def "never overwrites an x-spyglass-config an earlier customizer already set"() {
+        given:
+        def info = new Info()
+        info.addExtension('x-spyglass-config', [updateCheck: [intervalSeconds: 60]])
+        def openApi = new OpenAPI().info(info)
+
+        when:
+        updateCheckCustomizer.customise(openApi)
+
+        then:
+        openApi.info.extensions['x-spyglass-config'] == [updateCheck: [intervalSeconds: 60]]
+    }
 }

@@ -4,6 +4,14 @@ import { isSafeHref } from './config.js'
 // The loaded OpenAPI document. Set by loadSpec and used as the resolution root for $ref.
 let ROOT = null
 
+// The raw spec response text and its ETag (if the host sent one), captured at load. The update
+// check (Signal B, useUpdateCheck.js) hashes this text once for its baseline and replays the ETag
+// as an opportunistic If-None-Match on later polls. Kept here because loadSpec is the single place
+// the bytes are read; a separate baseline fetch could race a Blue/Green swap and hash a different
+// deployment than the one this tab rendered.
+let RAW_TEXT = null
+let SPEC_ETAG = null
+
 // Sentinel returned by serializeNode for fields that must not appear in the payload.
 export const OMIT = Symbol('omit')
 
@@ -14,7 +22,12 @@ const nextId = () => ++seq
 export async function loadSpec(url) {
   const res = await fetch(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(`Failed to load spec from ${url}: HTTP ${res.status}`)
-  ROOT = await res.json()
+  // Read the body as text first (not res.json()) so the update check can hash the exact bytes the
+  // server sent for its baseline; parse from that same text. Capturing the ETag here lets a later
+  // poll send a matching If-None-Match when the host runs a validator (e.g. ShallowEtagHeaderFilter).
+  RAW_TEXT = await res.text()
+  SPEC_ETAG = res.headers.get('ETag')
+  ROOT = JSON.parse(RAW_TEXT)
   return ROOT
 }
 
@@ -22,6 +35,16 @@ export async function loadSpec(url) {
 // component namespace, letting internal `#/components/...` $refs resolve.
 export function specRoot() {
   return ROOT
+}
+
+// The raw text of the loaded spec response, for the update check's Signal-B baseline hash.
+export function specRawText() {
+  return RAW_TEXT
+}
+
+// The ETag the spec response carried at load (or null) — replayed as an opportunistic If-None-Match.
+export function specEtag() {
+  return SPEC_ETAG
 }
 
 // --- $ref resolution -------------------------------------------------------

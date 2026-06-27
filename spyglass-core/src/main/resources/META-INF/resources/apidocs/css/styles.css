@@ -35,6 +35,7 @@
      higher z-index for editor tooltips, which sit above both.) */
   --z-dropdown: 50;
   --z-tooltip: 1000;
+  --z-toast: 1100;   /* the update toast sits above tooltips so its Reload/Dismiss stay clickable */
   /* Raw-JSON editor syntax tokens (CodeMirror); see JsonEditor.js. The light values are
      CodeMirror's own defaults (string=#a11, number=#164, bool=#219, null=#708 via keyword),
      restored so light mode is unchanged; the dark values are brightened, equally
@@ -767,6 +768,34 @@ h3 { margin: 18px 0 8px; font-size: 13px; }
 .combobox-del { flex: 0 0 auto; color: var(--muted); opacity: 0; cursor: pointer; font-size: 11px; padding: 0 2px; }
 .combobox-list li:hover .combobox-del, .combobox-list li.active .combobox-del { opacity: .55; }
 .combobox-del:hover { color: var(--danger); opacity: 1; }
+
+/* "A new version is available" toast (see useUpdateCheck.js). A single unobtrusive bottom-right card;
+   role=status, so it announces without stealing focus. The slide-in is flattened by the reduced-motion
+   block below. */
+.update-toast {
+  position: fixed; bottom: 16px; right: 16px; z-index: var(--z-toast);
+  display: flex; align-items: center; gap: 12px;
+  max-width: 360px; padding: 10px 12px;
+  background: var(--bg-alt); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 4px 14px var(--shadow); font-size: 13px;
+  animation: update-toast-in .18s ease;
+}
+@keyframes update-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.update-toast-msg { flex: 1 1 auto; line-height: 1.4; }
+.update-toast-reload {
+  flex: 0 0 auto; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent);
+  font-size: 12px; font-weight: 600;
+}
+.update-toast-dismiss {
+  flex: 0 0 auto; padding: 4px; border: none; background: none; cursor: pointer;
+  color: var(--muted); font-size: 14px; line-height: 1;
+}
+.update-toast-dismiss:hover { color: var(--text); }
 
 /* Respect a reduced-motion preference: near-instant transitions/animations (the tooltip fade, the
    theme/tab color transitions) and no smooth scrolling. */

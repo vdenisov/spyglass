@@ -54,6 +54,53 @@ class SpyglassOpenApiCustomizerSpec extends Specification {
         openApi.info.title == "My Custom API"
     }
 
+    def "fills info.version from the build version when none is set"() {
+        given:
+        def versioned = new SpyglassOpenApiCustomizer("demo-service", "1.4.2")
+        def openApi = new OpenAPI()
+
+        when:
+        versioned.customise(openApi)
+
+        then:
+        openApi.info.version == "1.4.2"
+    }
+
+    def "treats springdoc's placeholder version 'v0' as unset and replaces it with the build version"() {
+        given:
+        def versioned = new SpyglassOpenApiCustomizer("demo-service", "1.4.2")
+        def openApi = new OpenAPI().info(new Info().version("v0"))
+
+        when:
+        versioned.customise(openApi)
+
+        then:
+        openApi.info.version == "1.4.2"
+    }
+
+    def "never overwrites a real info.version the consumer set"() {
+        given:
+        def versioned = new SpyglassOpenApiCustomizer("demo-service", "1.4.2")
+        def openApi = new OpenAPI().info(new Info().version("2024-09"))
+
+        when:
+        versioned.customise(openApi)
+
+        then:
+        openApi.info.version == "2024-09"
+    }
+
+    def "leaves the version untouched when no build version is available"() {
+        given: "the default customizer carries no build version"
+        def openApi = new OpenAPI().info(new Info().version("v0"))
+
+        when:
+        customizer.customise(openApi)
+
+        then:
+        openApi.info.version == "v0"
+    }
+
     def "falls back to a bare 'API' title and adds no x-service-name when no application name is set"() {
         given:
         def blankNameCustomizer = new SpyglassOpenApiCustomizer("  ")

@@ -1,12 +1,14 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import { CONFIG, storageKey, isSameOriginExtension } from '../config.js'
-import { loadSpec, collectOperations } from '../spec.js'
+import { CONFIG, storageKey, isSameOriginExtension, resolveUpdateCheckConfig } from '../config.js'
+import { loadSpec, collectOperations, specRawText, specEtag } from '../spec.js'
 import { loadJson, saveJson, clearSaved, HEADERS_KEY, AUTH_TOKEN_KEY, SIDEBAR_WIDTH_KEY, ACCEPT_KEY } from '../storage.js'
 import { getValues, recordValue, removeValue, authKey } from '../history.js'
 import { registry, registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver, loadExtensions } from '../extensions.js'
+import { useUpdateCheck } from '../useUpdateCheck.js'
 import Sidebar from './Sidebar.js'
 import OperationPanel from './OperationPanel.js'
 import ThemeToggle from './ThemeToggle.js'
+import UpdateToast from './UpdateToast.js'
 
 const MIN_SIDEBAR = 240
 
@@ -15,7 +17,7 @@ const MIN_SIDEBAR = 240
 // front-end extensions through the seam (see extensions.js); the core ships none of it.
 export default {
   name: 'App',
-  components: { Sidebar, OperationPanel, ThemeToggle },
+  components: { Sidebar, OperationPanel, ThemeToggle, UpdateToast },
   setup() {
     const loading = ref(true)
     const error = ref('')
@@ -133,6 +135,11 @@ export default {
       else headers.value.unshift(headerRow({ key: 'Authorization', value }))
     }
 
+    // Update check (see useUpdateCheck.js). Created here in setup() so its onBeforeUnmount cleanup
+    // registers while the instance is active; actually started below in onMounted, once the spec has
+    // loaded (so the baseline hash is taken from the document this tab rendered).
+    const updateCheck = useUpdateCheck()
+
     // The seam context handed to each extension's register(api). It exposes the loaded spec (for the
     // extension to read its own x-* info extensions), the header bridge (add rows, read/set the
     // Authorization value, observe Clear-all), persistence/history helpers (so extensions don't import
@@ -150,6 +157,15 @@ export default {
       history: { values: getValues, record: recordValue, remove: removeValue, key: authKey },
       ui: { registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver }
     })
+
+    // Start the update check: poll the spec for a sustained content change and raise the reload toast.
+    // The baseline is the spec text loadSpec already captured, so it's tied to the document this tab
+    // rendered; config is resolved with the spec layer folded in (x-spyglass-config).
+    const startUpdateCheck = (spec) => {
+      const config = resolveUpdateCheckConfig(spec)
+      if (!config.enabled) return
+      updateCheck.start({ config, specUrl: CONFIG.specUrl, loadedText: specRawText(), loadedEtag: specEtag() })
+    }
 
     // The URL hash is the source of truth for the current selection: #<METHOD>-<path>.
     const anchorFor = (op) => `${op.method}-${op.path}`
@@ -229,6 +245,7 @@ export default {
         if (storedWidth == null) measureSidebar()
         else sidebarWidth.value = clampWidth(sidebarWidth.value)
         applyHash()
+        startUpdateCheck(spec)
       } catch (e) {
         error.value = e.message
       } finally {
@@ -273,7 +290,8 @@ export default {
       accept, acceptOptions, onAcceptInput,
       addHeader, removeHeader, select, startDrag, onDividerKey, minSidebar: MIN_SIDEBAR, clearHeaders,
       currentExec,
-      headerPresets: registry.headerPresets, authPanels: registry.authPanels, headerToAdd, addPreset
+      headerPresets: registry.headerPresets, authPanels: registry.authPanels, headerToAdd, addPreset,
+      updateToastShow: updateCheck.show, onUpdateReload: updateCheck.reload, onUpdateDismiss: updateCheck.dismiss
     }
   },
   template: `
@@ -330,6 +348,7 @@ export default {
         <OperationPanel v-else-if="selected" :operation="selected" :exec-state="currentExec" :base-url="baseUrl" :headers="headers" :accept="accept" />
         <div v-else class="status-msg" role="status">Select an operation from the left.</div>
       </main>
+      <UpdateToast :show="updateToastShow" :title="title" @reload="onUpdateReload" @dismiss="onUpdateDismiss" />
     </div>
   `
 }

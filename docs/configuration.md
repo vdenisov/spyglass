@@ -43,6 +43,48 @@ Every key is namespaced (`storageKey('headers')` → `apidocs-headers`). The inv
 | `response-pretty` | local | pretty-print response preference |
 | `op-form` | local | per-operation request-form snapshot |
 
+### Update check
+
+A long-lived explorer tab can silently go stale when the service regenerates its spec or redeploys. The
+explorer polls the spec and, when a change is **sustained** across a confirmation window, shows a single
+dismissible "<API> was updated — Reload" toast. It never reloads on its own (a reload would drop unsaved
+per-operation form input).
+
+The signal is a **content change to the spec** at the spec URL — the common case being a regenerated
+document (new endpoints/schemas). Detection is a content hash of the spec text, so it catches every such
+change even when `info.version` is static. Polling is visibility-gated (a hidden tab makes no requests),
+a rollout's transient flapping is absorbed by the confirmation window, and the poll sends an opportunistic
+`If-None-Match` (so a host running a validator like `ShallowEtagHeaderFilter` answers an unchanged poll
+with a cheap `304`). On by default and conservative; trivially disabled.
+
+| Setting | Query param | `SPYGLASS_CONFIG` key | Default |
+| --- | --- | --- | --- |
+| Enabled | `?updateCheck=off` | `updateCheck.enabled` | `true` |
+| Poll interval (seconds) | `?updateCheckInterval=` | `updateCheck.intervalSeconds` | `300` |
+| Confirmation window (seconds) | `?updateCheckWindow=` | `updateCheck.confirmWindowSeconds` | `1800` |
+
+The update check also accepts a **spec-supplied** layer via the `x-spyglass-config` `info` extension (see
+below), so an operator can tune it server-side with no inline script. Precedence, lowest to highest:
+
+**built-in default → spec `x-spyglass-config.updateCheck` → `window.SPYGLASS_CONFIG.updateCheck` → URL query parameter.**
+
+```html
+<script>
+  window.SPYGLASS_CONFIG = {
+    updateCheck: { intervalSeconds: 600 }   // poll every 10 min; other fields keep their defaults
+  }
+</script>
+```
+
+> **Making changes detectable.** A change is noticed when the spec bytes change. Ideally give your API a
+> meaningful `info.version` and bump it when the contract changes. Many teams don't (microservices often
+> have no fixed API version, and the contract may change several times a day) — for them the adapters fill
+> `info.version` from the **build version** automatically (when `info.version` is unset and the
+> `build-info` goal ran; disable with `apidocs.spec-version.from-build=false`), and failing even that,
+> hash detection still catches every endpoint/schema change. The `Reload` action re-fetches the assets
+> too — kept fresh by the `Cache-Control: no-cache` + content-ETag the adapters serve on `/apidocs/**` —
+> and enabling `server.compression` shrinks each spec poll.
+
 ## OpenAPI `info` extension catalog (`x-*`)
 
 The **mechanism** — emit/consume `x-*` keys on the document's `info` object — is part of the core. The
@@ -52,16 +94,20 @@ core consumes and emits two generic keys; other keys are populated by whatever e
 | --- | --- | --- | --- |
 | `x-service-name` | emitted | the core (`SpyglassOpenApiCustomizer`, from `spring.application.name`) | Informational service name. |
 | `x-spyglass-extensions` | **consumed** by core | whichever customizer supplies extensions (e.g. the demo's `DemoEndpointsConfiguration`, or an extension pack) | A list of ESM extension-module URLs to load. Spec-supplied entries are **same-origin only** (operator-supplied lists via `?ext=`/`SPYGLASS_CONFIG` are trusted anywhere). |
+| `x-spyglass-config` | **consumed** by core | whichever customizer supplies it (e.g. the demo sets the update-check interval) | A nested config object the front end folds **under** the operator layers (`SPYGLASS_CONFIG`/query win). Currently carries `updateCheck` — see [Update check](#update-check). |
 
 An extension can populate further keys against the same mechanism — e.g. a mint-endpoint path or a
 deep-link config — read by its own front-end extension modules, not by the core.
 
 ## `apidocs.*` properties
 
-The core and the Spring adapters bind **no** `apidocs.*` configuration — they read only the standard
-`spring.application.name`. Every `apidocs.*` property is introduced by the module that owns the feature
-it configures, and applies only when that module is on the classpath:
+The core and the Spring adapters read the standard `spring.application.name` plus a single optional
+toggle; every other `apidocs.*` property is introduced by the module that owns the feature it configures,
+and applies only when that module is on the classpath:
 
+- `apidocs.spec-version.from-build` — introduced by the adapters (`spyglass-spring-core`); when `true`
+  (default) and the API has no explicit `info.version`, it's filled from the build version (see
+  [Update check](#update-check)). Set `false` to leave the version untouched.
 - `apidocs.demo.enabled` — introduced by `spyglass-demo` (gates the demo endpoints).
 - Feature properties such as a mint toggle, a deep-link config, or a directory base URL — introduced by
   an extension that adds those features.
