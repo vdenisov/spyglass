@@ -66,6 +66,13 @@
         <playwright.version>1.60.0</playwright.version>
         <gmavenplus.version>4.2.1</gmavenplus.version>
 
+        <!--
+            The Playwright "*AE" browser specs run by default as part of `verify` (failsafe). Set this
+            true to skip them for quick or offline builds that can't provision the Chromium binary:
+            `mvn verify -DskipBrowserTests=true`. Surefire unit specs run regardless.
+        -->
+        <skipBrowserTests>false</skipBrowserTests>
+
         <!-- Plugin versions. -->
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
@@ -252,11 +259,27 @@
                     <testClassesDirectory>${project.build.testOutputDirectory}</testClassesDirectory>
                 </configuration>
                 <executions>
+                    <!--
+                        Run the explorer browser specs (names ending in "AE", for "API Explorer") by
+                        default. They drive a real headless Chromium via Playwright; the "*AE" naming keeps
+                        them off surefire's unit patterns so they stay on failsafe (integration-test/verify).
+                        This execution is scoped to "*AE" alone, so -DskipBrowserTests=true (see the property
+                        above) skips exactly the browser specs — a conventional "*IT" added later would get
+                        its own execution and stays unaffected by the flag. Only the adapter and demo modules
+                        carry "*AE" specs; the include is a harmless no-op elsewhere.
+                    -->
                     <execution>
+                        <id>browser-specs</id>
                         <goals>
                             <goal>integration-test</goal>
                             <goal>verify</goal>
                         </goals>
+                        <configuration>
+                            <includes>
+                                <include>**/*AE.java</include>
+                            </includes>
+                            <skipITs>${skipBrowserTests}</skipITs>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -378,7 +401,7 @@
             The Boot 4 / springdoc 3 leg of the build-compatibility matrix. It only overrides the two
             BOM-import versions; every framework dependency is provided-scope and BOM-managed, so
             flipping these reconfigures the whole reactor with no per-module edits.
-            Enable with: mvn -Pboot4 verify (add -Papidocs-tests for the browser specs).
+            Enable with: mvn -Pboot4 verify (the "*AE" browser specs run by default in both legs).
         -->
         <profile>
             <id>boot4</id>
@@ -386,28 +409,6 @@
                 <springboot.version>4.1.0</springboot.version>
                 <springdoc.version>3.0.3</springdoc.version>
             </properties>
-        </profile>
-
-        <!--
-            Runs the explorer browser specs (names ending in "AE", for "API Explorer"), which use
-            Playwright. The "*AE" naming keeps them out of the default surefire/failsafe patterns; this
-            profile makes failsafe run them (and only them). Enable with: mvn verify -Papidocs-tests
-        -->
-        <profile>
-            <id>apidocs-tests</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-failsafe-plugin</artifactId>
-                        <configuration>
-                            <includes>
-                                <include>**/*AE.java</include>
-                            </includes>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
         </profile>
     </profiles>
 

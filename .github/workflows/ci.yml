@@ -67,7 +67,7 @@ jobs:
           -Dexec.args="install --with-deps chromium"
           -Dexec.cleanupDaemonThreads=false
 
-      # Unit specs (surefire) + the "*AE" browser specs (failsafe, via the apidocs-tests profile) in one
-      # invocation — the profile only widens the failsafe includes, surefire still runs the unit specs.
+      # Unit specs (surefire) + the "*AE" browser specs (failsafe) in one invocation. Both run by
+      # default now; the Chromium installed above lets the browser specs drive a real headless browser.
       - name: Verify (unit + browser specs)
-        run: mvn -B ${{ matrix.leg.profile }} verify -Papidocs-tests
+        run: mvn -B ${{ matrix.leg.profile }} verify
