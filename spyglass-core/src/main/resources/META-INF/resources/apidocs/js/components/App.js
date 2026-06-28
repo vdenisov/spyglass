@@ -4,6 +4,7 @@ import { loadSpec, collectOperations, specRawText, specEtag } from '../spec.js'
 import { loadJson, saveJson, clearSaved, HEADERS_KEY, AUTH_TOKEN_KEY, SIDEBAR_WIDTH_KEY, ACCEPT_KEY } from '../storage.js'
 import { getValues, recordValue, removeValue, authKey } from '../history.js'
 import { registry, registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver, loadExtensions } from '../extensions.js'
+import { recordExecution } from '../requestLog.js'
 import { useUpdateCheck } from '../useUpdateCheck.js'
 import Sidebar from './Sidebar.js'
 import OperationPanel from './OperationPanel.js'
@@ -159,6 +160,8 @@ export default {
       storage: { key: storageKey, load: loadJson, save: saveJson },
       history: { values: getValues, record: recordValue, remove: removeValue, key: authKey },
       ui: { registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver }
+      // An embedding service can register a Request Log sanitizer here (requestLog.js `registerSanitizer`)
+      // to redact request/response surfaces before they are persisted, running after the core default.
     })
 
     // Start the update check: poll the spec for a sustained content change and raise the reload toast.
@@ -292,7 +295,7 @@ export default {
       authorizationValue, setAuthorization, authResetSeq,
       accept, acceptOptions, onAcceptInput,
       addHeader, removeHeader, select, startDrag, onDividerKey, minSidebar: MIN_SIDEBAR, clearHeaders,
-      currentExec,
+      currentExec, recordExecution,
       headerPresets: registry.headerPresets, authPanels: registry.authPanels, headerToAdd, addPreset,
       updateToastShow: updateCheck.show, onUpdateReload: updateCheck.reload, onUpdateDismiss: updateCheck.dismiss
     }
@@ -348,7 +351,7 @@ export default {
 
         <div v-if="loading" class="status-msg" role="status">Loading spec…</div>
         <div v-else-if="error" class="status-msg error" role="alert">Failed to load spec: {{ error }}</div>
-        <OperationPanel v-else-if="selected" :operation="selected" :exec-state="currentExec" :base-url="baseUrl" :headers="headers" :accept="accept" />
+        <OperationPanel v-else-if="selected" :operation="selected" :exec-state="currentExec" :base-url="baseUrl" :headers="headers" :accept="accept" :on-executed="recordExecution" />
         <div v-else class="status-msg" role="status">Select an operation from the left.</div>
       </main>
       <UpdateToast :show="updateToastShow" :title="title" @reload="onUpdateReload" @dismiss="onUpdateDismiss" />

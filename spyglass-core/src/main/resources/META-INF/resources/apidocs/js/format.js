@@ -18,3 +18,14 @@ export function formatBytes(n) {
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
   return v.toFixed(1) + ' ' + units[i]
 }
+
+// Extracts the filename from a Content-Disposition header (handling RFC 5987 filename*= and quotes),
+// or '' when none is present. Shared by the response download control and the Request Log.
+export function filenameFromDisposition(cd) {
+  if (!cd) return ''
+  const star = /filename\*\s*=\s*(?:[^']*'[^']*')?([^;]+)/i.exec(cd)
+  if (star) { try { return decodeURIComponent(star[1].trim().replace(/^"|"$/g, '')) } catch (e) { /* fall through */ } }
+  const plain = /filename\s*=\s*("([^"]*)"|[^;]+)/i.exec(cd)
+  if (plain) return (plain[2] != null ? plain[2] : plain[1]).trim()
+  return ''
+}
