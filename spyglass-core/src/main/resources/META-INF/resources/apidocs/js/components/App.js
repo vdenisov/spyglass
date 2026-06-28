@@ -4,7 +4,7 @@ import { loadSpec, collectOperations, specRawText, specEtag } from '../spec.js'
 import { loadJson, saveJson, clearSaved, HEADERS_KEY, AUTH_TOKEN_KEY, SIDEBAR_WIDTH_KEY, ACCEPT_KEY } from '../storage.js'
 import { getValues, recordValue, removeValue, authKey } from '../history.js'
 import { registry, registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver, loadExtensions } from '../extensions.js'
-import { recordExecution } from '../requestLog.js'
+import { recordExecution, registerSanitizer } from '../requestLog.js'
 import { useUpdateCheck } from '../useUpdateCheck.js'
 import Sidebar from './Sidebar.js'
 import OperationPanel from './OperationPanel.js'
@@ -159,9 +159,12 @@ export default {
       },
       storage: { key: storageKey, load: loadJson, save: saveJson },
       history: { values: getValues, record: recordValue, remove: removeValue, key: authKey },
-      ui: { registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver }
-      // An embedding service can register a Request Log sanitizer here (requestLog.js `registerSanitizer`)
-      // to redact request/response surfaces before they are persisted, running after the core default.
+      ui: { registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver },
+      // An embedding service redacts org-specific surfaces of a Request Log record (request/response
+      // headers and bodies, the query in the URL and the replay snapshot) before it is persisted. The
+      // sanitizer runs after the core Authorization default and in registration order; throwing drops
+      // the record (fail-closed) rather than storing it un-redacted.
+      requestLog: { registerSanitizer }
     })
 
     // Start the update check: poll the spec for a sustained content change and raise the reload toast.

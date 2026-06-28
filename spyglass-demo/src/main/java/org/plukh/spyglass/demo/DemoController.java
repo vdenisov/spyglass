@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import io.swagger.v3.oas.annotations.ExternalDocumentation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -290,6 +292,36 @@ public class DemoController {
         return payload;
     }
 
+    @Operation(
+            summary = "Exchange credentials for a session (Request Log sanitizer showcase)",
+            description = "Demo — every request and response surface carries a secret, so it exercises the "
+                    + "Request Log **sanitizer seam**. The bundled sample extension registers a sanitizer that "
+                    + "redacts each one before the call is persisted: the `apiKey` query value (in the URL and the "
+                    + "replay snapshot), the `X-Demo-Api-Key` request header, the `secret` request-body field, the "
+                    + "`X-Demo-Session` response header and the `sessionToken` response-body field. The "
+                    + "non-sensitive `note` is echoed back untouched, so the redaction is visibly surgical.")
+    @ApiResponse(
+            responseCode = "200",
+            description = "A session payload, with the sensitive session id also returned as a response header.",
+            headers = @Header(name = "X-Demo-Session", description = "An opaque session id for this exchange (sensitive).",
+                    schema = @Schema(type = "string")))
+    @PostMapping("/secrets")
+    public ResponseEntity<SecretResponse> exchangeSecret(
+            @Parameter(description = "An API key sent as a **query parameter** — a credential that must never be logged.")
+            @RequestParam(value = "apiKey", required = false) String apiKey,
+            @Parameter(description = "An API key sent as a **request header** — a credential that must never be logged.",
+                    in = ParameterIn.HEADER)
+            @RequestHeader(value = "X-Demo-Api-Key", required = false) String apiKeyHeader,
+            @RequestBody SecretRequest request) {
+        return ResponseEntity.ok()
+                .header("X-Demo-Session", "demo-session-id-DO-NOT-LOG")
+                .body(SecretResponse.builder()
+                        .message("Exchanged credentials for a session.")
+                        .sessionToken("demo-session-token-DO-NOT-LOG")
+                        .note(request != null ? request.getNote() : null)
+                        .build());
+    }
+
     // The multipart body schema is declared explicitly (a doc-only DTO) because springdoc otherwise
     // emits the plain text part as a query parameter rather than a field of the multipart body. The
     // text part is bound via @RequestParam (hidden from the docs so it isn't duplicated as a query).
@@ -445,6 +477,39 @@ public class DemoController {
 
         @ArraySchema(arraySchema = @Schema(description = "Optional tags.", example = "[\"a\", \"b\"]"), schema = @Schema(type = "string"))
         List<String> tags;
+    }
+
+    /**
+     * Demo — the request body of {@code POST /secrets}: a sensitive field the sanitizer redacts and a
+     * non-sensitive one it leaves untouched.
+     */
+    @Value
+    public static class SecretRequest {
+
+        @Schema(description = "A sensitive value (e.g. a password or token) — redacted from the Request Log.",
+                example = "hunter2")
+        String secret;
+
+        @Schema(description = "A non-sensitive note — kept verbatim in the Request Log.", example = "exchange for staging")
+        String note;
+    }
+
+    /**
+     * Demo — the response body of {@code POST /secrets}: a sensitive session token the sanitizer redacts
+     * and the echoed non-sensitive note.
+     */
+    @Value
+    @Builder
+    public static class SecretResponse {
+
+        @Schema(description = "Human-readable confirmation.")
+        String message;
+
+        @Schema(description = "An opaque session token — sensitive, redacted from the Request Log.")
+        String sessionToken;
+
+        @Schema(description = "The non-sensitive note, echoed back.")
+        String note;
     }
 
     /**

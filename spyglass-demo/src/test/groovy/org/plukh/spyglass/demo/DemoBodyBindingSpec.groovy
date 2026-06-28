@@ -98,6 +98,17 @@ class DemoBodyBindingSpec extends Specification {
         'bike' | '{"mode":"bike","vin":"VIN-1","gears":7}' || 'gears' | 7
     }
 
+    def "POST /apidocs-demo/secrets binds the body and returns a session payload echoing the note"() {
+        when:
+        def res = post('/apidocs-demo/secrets', '{"secret":"hunter2","note":"keep-me"}')
+
+        then:
+        res.code == 200
+        def echoed = json.parseText(res.text)
+        echoed.sessionToken == 'demo-session-token-DO-NOT-LOG'
+        echoed.note == 'keep-me'
+    }
+
     // ---- helpers -------------------------------------------------------------
 
     private Map post(String path, String bodyJson) {

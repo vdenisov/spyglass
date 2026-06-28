@@ -133,6 +133,47 @@ class RequestLogAE extends SpyglassSpecBase {
         !rawDbContainsSecret('signature-supersecret')
     }
 
+    def "runs extension sanitizers after the core default, in registration order"() {
+        given:
+        open('GET-/widgets/{id}')
+
+        expect: 'the core mask runs first; two registered sanitizers then run, in the order registered'
+        page.evaluate('''async () => {
+            const m = await import('/apidocs/js/requestLog.js')
+            m.registerSanitizer(r => { r.response.body = (r.response.body || '') + '#first'; return r })
+            m.registerSanitizer(r => { r.response.body = (r.response.body || '') + '#second'; return r })
+            await m.recordExecution({
+                opId: 'GET /order',
+                req: { method: 'GET', absUrl: 'http://x/a', headers: { Authorization: 'tok' } },
+                response: { status: 200, statusText: 'OK', durationMs: 1, contentType: 'application/json', blob: new Blob(['{}']), rawBody: '{}', headersList: [] },
+                snapshot: {}
+            })
+            const rec = (await m.recordsForOp('GET /order'))[0]
+            return { auth: rec.request.headers.Authorization, body: rec.response.body }
+        }''') == [auth: '***', body: '{}#first#second']
+    }
+
+    def "drops the record when an extension sanitizer throws (fail-closed), without breaking execution"() {
+        given:
+        open('GET-/widgets/{id}')
+
+        expect: 'recordExecution neither throws nor persists when a sanitizer throws'
+        page.evaluate('''async () => {
+            const m = await import('/apidocs/js/requestLog.js')
+            m.registerSanitizer(() => { throw new Error('boom') })
+            let threw = false
+            try {
+                await m.recordExecution({
+                    opId: 'GET /boom',
+                    req: { method: 'GET', absUrl: 'http://x/a', headers: {} },
+                    response: { status: 200, statusText: 'OK', durationMs: 1, contentType: 'application/json', blob: new Blob(['{}']), rawBody: '{}', headersList: [] },
+                    snapshot: {}
+                })
+            } catch (e) { threw = true }
+            return { threw, count: (await m.recordsForOp('GET /boom')).length }
+        }''') == [threw: false, count: 0]
+    }
+
     def "evicts the oldest beyond the per-operation cap, keeping the newest"() {
         given:
         open('GET-/widgets/{id}')
@@ -235,27 +276,5 @@ class RequestLogAE extends SpyglassSpecBase {
 
         then: 'nothing request-log-shaped is rendered'
         page.locator('.request-log').count() == 0
-    }
-
-    // ---- helpers -------------------------------------------------------------
-
-    /** Waits until the operation has at least one stored record, then returns its first (oldest) record. */
-    private Object waitForOneRecord(String opId) {
-        page.waitForFunction(
-                "async (op) => { const m = await import('/apidocs/js/requestLog.js'); return (await m.recordsForOp(op)).length >= 1 }",
-                opId)
-        records(opId)[0]
-    }
-
-    /** All records for an operation, oldest-first, as deserialized maps. */
-    private List records(String opId) {
-        page.evaluate("async (op) => { const m = await import('/apidocs/js/requestLog.js'); return await m.recordsForOp(op) }", opId) as List
-    }
-
-    /** Whether the raw request-log database contains the given substring anywhere (the fail-closed proof). */
-    private boolean rawDbContainsSecret(String secret) {
-        page.evaluate(
-                "async (s) => { const m = await import('/apidocs/js/requestLog.js'); return JSON.stringify(await m.allRecords()).includes(s) }",
-                secret) as boolean
     }
 }
