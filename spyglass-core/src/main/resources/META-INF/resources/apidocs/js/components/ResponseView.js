@@ -2,7 +2,7 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { copyText } from '../clipboard.js'
 import { resolveHeaderLink } from '../extensions.js'
 import { loadJson, saveJson, RESPONSE_PRETTY_KEY } from '../storage.js'
-import { formatBytes, statusKind } from '../format.js'
+import { formatBytes, statusKind, filenameFromDisposition } from '../format.js'
 import { useFlash } from '../useFlash.js'
 import CodeViewer from './CodeViewer.js'
 
@@ -30,16 +30,6 @@ function extFor(contentType) {
   const sub = c.split('/')[1] || ''
   const cleaned = (sub.split('+').pop() || sub).replace(/^x-/, '').replace(/^vnd\./, '')
   return /^[a-z0-9.-]{1,8}$/.test(cleaned) ? cleaned : 'bin'
-}
-
-// Extracts the filename from a Content-Disposition header (handling RFC 5987 filename*= and quotes).
-function filenameFromDisposition(cd) {
-  if (!cd) return ''
-  const star = /filename\*\s*=\s*(?:[^']*'[^']*')?([^;]+)/i.exec(cd)
-  if (star) { try { return decodeURIComponent(star[1].trim().replace(/^"|"$/g, '')) } catch (e) { /* fall through */ } }
-  const plain = /filename\s*=\s*("([^"]*)"|[^;]+)/i.exec(cd)
-  if (plain) return (plain[2] != null ? plain[2] : plain[1]).trim()
-  return ''
 }
 
 // Displays the result of a "try it out" request. Rendering is chosen from the response Content-Type:

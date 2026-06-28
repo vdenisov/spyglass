@@ -454,9 +454,11 @@ export default {
       recordHistory()
       // Capture the originating operation's slice and id NOW. After any `await` below, `props` reflects
       // whatever operation is currently selected, so every post-await write must go through these
-      // captures — that is what routes the response back to the operation it was sent from.
+      // captures — that is what routes the response back to the operation it was sent from. The form
+      // snapshot is captured here too (the refs still hold this operation's values), for the Request Log.
       const es = props.execState
       const opId = props.operation.id
+      const snapshot = buildSnapshot()
       // Re-sending replaces this operation's own prior in-flight call.
       if (es.inflight) es.inflight.abort()
       const ctrl = new AbortController()
@@ -489,7 +491,7 @@ export default {
           headersList: headerEntries.map(([name, value]) => ({ name, value })),
           headersText: headerEntries.map(([k, v]) => k + ': ' + v).join('\n')
         }
-        if (props.onExecuted) props.onExecuted({ opId, req, response: es.response })
+        if (props.onExecuted) props.onExecuted({ opId, req, response: es.response, snapshot })
       } catch (e) {
         // Drop a superseded call's error/abort (e.g. the one a re-send just aborted) so it can't flash
         // "Request cancelled" over the newer in-flight; only the current call reports.
