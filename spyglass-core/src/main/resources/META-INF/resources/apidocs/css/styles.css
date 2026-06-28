@@ -545,6 +545,42 @@ h3 { margin: 18px 0 8px; font-size: 13px; }
 /* Type-info line: muted monospace, not a chip. */
 .cm6-json-schema-hover--code { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 
+/* Completion dropdown list. CodeMirror only themes its option list for its own built-in light/dark
+   themes; our surfaceTheme isn't registered as dark, so in dark mode the list keeps the light base
+   background while our completion text uses the (light) --text — light-on-light, unreadable. Repaint
+   the container and options with the app palette so the list follows the theme. The two-class
+   .cm-tooltip.cm-tooltip-autocomplete prefix keeps priority over CodeMirror's runtime-injected base
+   theme, whose option/selected rules otherwise tie on specificity and win by injection order. */
+.cm-tooltip.cm-tooltip-autocomplete {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+.cm-tooltip.cm-tooltip-autocomplete > ul {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.cm-tooltip.cm-tooltip-autocomplete > ul > li {
+  padding: 2px 8px;
+  color: var(--text);
+}
+.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+/* The value-type hint (string/boolean/…) shown after each name: muted, but flips to readable on the
+   selected row's accent fill. */
+.cm-tooltip.cm-tooltip-autocomplete .cm-completionDetail { color: var(--muted); }
+.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail { color: var(--on-accent); }
+/* Matched-characters highlight as the user types. */
+.cm-tooltip.cm-tooltip-autocomplete .cm-completionMatchedText {
+  text-decoration: none;
+  font-weight: 700;
+  color: var(--accent);
+}
+.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionMatchedText { color: var(--on-accent); }
+
 /* Hide CodeMirror's code-oriented completion type glyphs (□/ƒ/𝑥/…): in a JSON body the value type
    shown next to each name (string/array) already conveys the kind, so the icon is redundant. */
 .cm-tooltip-autocomplete .cm-completionIcon { display: none; }

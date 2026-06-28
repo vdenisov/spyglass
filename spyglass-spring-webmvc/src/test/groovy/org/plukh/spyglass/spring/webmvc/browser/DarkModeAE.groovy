@@ -23,6 +23,8 @@ class DarkModeAE extends SpyglassSpecBase {
     private static final String DARK_BOOL = 'rgb(121, 192, 255)'   // --cm-bool #79c0ff
     private static final String DARK_NULL = 'rgb(210, 168, 255)'   // --cm-null #d2a8ff
     private static final String DARK_DANGER = 'rgb(248, 81, 73)'   // --danger #f85149
+    private static final String DARK_ACCENT = 'rgb(47, 129, 247)'  // --accent #2f81f7
+    private static final String ON_ACCENT = 'rgb(255, 255, 255)'   // --on-accent #ffffff
 
     // CodeMirror's own default light syntax colors, which dark mode must leave untouched.
     private static final String LIGHT_STRING = 'rgb(170, 17, 17)'  // #a11
@@ -153,7 +155,41 @@ class DarkModeAE extends SpyglassSpecBase {
         cssColor('.raw-body .cm-lint-marker-error', 'backgroundColor') == DARK_DANGER
     }
 
+    def "themes the autocomplete dropdown so every option stays legible in dark mode"() {
+        given: "an operation with a request body, in dark mode"
+        emulate(ColorScheme.DARK)
+        open('POST-/widgets')
+        clickBodyTab('Raw JSON')
+        page.waitForSelector('.raw-body .cm-gutters')
+
+        when: "schema property-name completion is requested inside an empty key"
+        requestCompletion()
+        page.waitForSelector('.cm-tooltip-autocomplete')
+
+        then: "the dropdown surface follows the theme"
+        cssColor('.cm-tooltip-autocomplete', 'backgroundColor') == DARK_BG
+
+        and: "a non-selected option is legible — themed text, not light-on-light against the popup"
+        String optColor = cssColor('.cm-tooltip-autocomplete > ul > li:not([aria-selected])', 'color')
+        optColor == DARK_TEXT
+        optColor != DARK_BG
+
+        and: "the selected option uses the accent fill with contrasting text"
+        cssColor('.cm-tooltip-autocomplete > ul > li[aria-selected]', 'backgroundColor') == DARK_ACCENT
+        cssColor('.cm-tooltip-autocomplete > ul > li[aria-selected]', 'color') == ON_ACCENT
+    }
+
     // ---- helpers -------------------------------------------------------------
+
+    /** Opens an empty object key and asks for schema property completion. */
+    private void requestCompletion() {
+        rawEditor().click()
+        page.keyboard().press('Control+A')
+        page.keyboard().insertText('{}')
+        page.keyboard().press('ArrowLeft')
+        page.keyboard().type('"')
+        page.keyboard().press('Control+Space')
+    }
 
     /** Switches to the raw editor and replaces its content with {@code json}. */
     private void openRawWith(String json) {
