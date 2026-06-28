@@ -54,10 +54,33 @@ resolver wins).
 | `api.ui.registerAuthPanel(component)` | Register a Vue component rendered in the headers editor. |
 | `api.ui.registerHeaderPresets(groups)` | Register `[{ group, items: [{ name, label, ph?, hint? }] }]` for the "+ Add preset header" dropdown. |
 | `api.ui.registerHeaderLinkResolver(fn)` | Register `(name, value) => url\|null` to turn a response header into a link. First non-null wins; unsafe schemes (`javascript:`/`data:`) are dropped. |
+| `api.requestLog.registerSanitizer(fn)` | Register `(record) => record` to redact a Request Log record before it is persisted. Runs after the core `Authorization` mask, in registration order; a throw drops the record (fail-closed). |
+
+## Redacting the Request Log
+
+The explorer keeps a per-operation **Request Log** — a persistent history of executed
+request/response pairs. Records are sanitized **at write time, before they are persisted**: the core
+masks the `Authorization` header by default, and an extension contributes org-specific redaction
+through `api.requestLog.registerSanitizer(fn)`.
+
+A sanitizer receives the pre-persist record and returns it, redacted in place. The whole record is
+passed, so every surface is reachable: `request.url` (the query string), `request.headers`,
+`request.body`, `response.headers`, `response.body`, the replay snapshot `request.params`, and
+`response.finalUrl`.
+
+- **Ordering.** Sanitizers run **after** the core `Authorization` mask and **in registration order**;
+  each receives the previous one's output.
+- **Fail-closed.** If a sanitizer throws, the record is **dropped, not persisted** — deliberately
+  unlike the header-link resolver (where a throw means "no link"), because here the risk is a secret
+  written to disk. Keep a sanitizer total and defensive so it never drops records by accident.
+- **Redact every surface.** A query- or body-borne secret is stored more than once: in the serialized
+  `request.url`/`request.body`, again in the replay snapshot (`request.params`), and again in
+  `response.finalUrl` (which mirrors the request URL's query even without a redirect). Redact a value
+  on every surface it appears on, not just the obvious one.
 
 ## Worked example: the demo's sample extension
 
-`spyglass-demo` ships a small, self-contained extension that exercises all three `ui` hooks and
+`spyglass-demo` ships a small, self-contained extension that exercises all four seam hooks and
 auto-loads from the spec (no `?ext=` needed). It is served same-origin from `META-INF/resources` at
 `/spyglass-ext/demo/index.js` and advertised by the demo's own additive `OpenApiCustomizer`:
 
@@ -110,8 +133,28 @@ export function register(api) {
       ])
     }
   })
+
+  // A Request Log sanitizer — redact secrets from a record before it is persisted, on every surface the
+  // value lands on. POST /apidocs-demo/secrets carries one in each: an `apiKey` query param, an
+  // X-Demo-Api-Key request header, a `secret` body field, an X-Demo-Session response header and a
+  // `sessionToken` response body field. Runs after the core Authorization mask, in registration order; a
+  // throw would drop the record (fail-closed), so it is scoped to known names and written to never throw.
+  // (redactQueryParam / redactHeader / redactJsonField are small local helpers — see the demo module.)
+  api.requestLog.registerSanitizer((record) => {
+    const req = record.request || {}, res = record.response || {}
+    req.url = redactQueryParam(req.url, 'apiKey')          // a query secret is also stored in the
+    res.finalUrl = redactQueryParam(res.finalUrl, 'apiKey') // replay snapshot and the final URL
+    redactHeader(req.headers, 'X-Demo-Api-Key')
+    redactHeader(res.headers, 'X-Demo-Session')
+    req.body = redactJsonField(req.body, 'secret')
+    res.body = redactJsonField(res.body, 'sessionToken')
+    return record
+  })
 }
 ```
 
+The full demo module also redacts those same values in the replay snapshot (`record.request.params`),
+which the excerpt above omits for brevity — see the source for the complete version.
+
 `vue` resolves through the explorer's import map, so the panel needs no build step. The end-to-end
-behaviour is covered by `SampleExtensionAE` in `spyglass-demo`.
+behaviour is covered by `SampleExtensionAE` and `RequestLogSanitizerAE` in `spyglass-demo`.

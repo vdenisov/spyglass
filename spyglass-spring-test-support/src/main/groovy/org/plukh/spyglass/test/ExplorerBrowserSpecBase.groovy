@@ -173,6 +173,31 @@ abstract class ExplorerBrowserSpecBase extends Specification {
         page.locator('.response .code-viewer .cm-content')
     }
 
+    // ---- Request Log (IndexedDB persistence) ---------------------------------
+    //
+    // The capture layer (requestLog.js) writes fire-and-forget off the render path, so reads poll the
+    // module via waitForFunction (which absorbs the write latency) rather than reading straight after Send.
+
+    /** Waits until the operation has at least one stored record, then returns its first (oldest) record. */
+    protected Object waitForOneRecord(String opId) {
+        page.waitForFunction(
+                "async (op) => { const m = await import('/apidocs/js/requestLog.js'); return (await m.recordsForOp(op)).length >= 1 }",
+                opId)
+        records(opId)[0]
+    }
+
+    /** All records for an operation, oldest-first, as deserialized maps. */
+    protected List records(String opId) {
+        page.evaluate("async (op) => { const m = await import('/apidocs/js/requestLog.js'); return await m.recordsForOp(op) }", opId) as List
+    }
+
+    /** Whether the raw request-log database contains the given substring anywhere (the no-leak proof). */
+    protected boolean rawDbContainsSecret(String secret) {
+        page.evaluate(
+                "async (s) => { const m = await import('/apidocs/js/requestLog.js'); return JSON.stringify(await m.allRecords()).includes(s) }",
+                secret) as boolean
+    }
+
     // ---- raw-JSON editor (CodeMirror) ----------------------------------------
 
     /** Switches the request body between the Form and Raw JSON tabs. */
