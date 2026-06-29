@@ -6,11 +6,20 @@
   <title>API Explorer</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <!--
+    Host override hook (config.local.js). A sourced, classic <script> — so it runs synchronously during
+    parse, before the deferred app module and before the inline theme script below. Shipped as a no-op;
+    a host that serves these assets as-is overrides just this one file to set window.SPYGLASS_CONFIG
+    (e.g. a non-default specUrl) without templating index.html or forking the jar. Being sourced (not
+    inline) it needs no CSP 'unsafe-inline'. See docs/configuration.md.
+  -->
+  <script src="js/config.local.js"></script>
+  <!--
     Apply the saved theme preference before the stylesheet paints, to avoid a flash of the
     wrong theme. data-theme holds the literal choice (light | dark | system); the CSS resolves
     "system" via prefers-color-scheme. This is the only inline script on the page. It can't import
     config.js (modules load later), so it mirrors that module's storage-namespace resolution
-    (?ns= query param, then window.SPYGLASS_CONFIG, then the "apidocs" default) inline.
+    (?ns= query param, then window.SPYGLASS_CONFIG — which config.local.js above may have set —
+    then the "apidocs" default) inline.
   -->
   <script>
     (function () {
@@ -25,8 +34,9 @@
     Content-Security-Policy note: the Raw JSON editor (CodeMirror) injects its styles as inline
     <style> elements at runtime (via style-mod), and renders trusted spec markdown into tooltips.
     If a CSP is ever applied to this page, style-src must allow 'unsafe-inline' (or supply nonces).
-    All other code is ES modules, but the no-flash theme script above is inline, so script-src
-    would also need a nonce/hash (or 'unsafe-inline') for that one element.
+    Every page script is either an ES module or the same-origin sourced config.local.js hook above
+    (both covered by script-src 'self'); only the no-flash theme script above is inline, so script-src
+    would additionally need a nonce/hash (or 'unsafe-inline') for that one element.
   -->
   <script type="importmap">
     {
