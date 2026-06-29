@@ -4,7 +4,9 @@
 // via — in priority order:
 //   1. URL query params      (?spec=…, ?ns=…, ?ext=…&ext=…)   — per-load, no deployment change
 //   2. window.SPYGLASS_CONFIG = { specUrl, storageNamespace, extensions }  — a global set before this
-//      module loads (e.g. by a host-provided inline <script> ahead of app.js)
+//      module loads, either by a host-provided inline <script> ahead of app.js, or by overriding the
+//      shipped config.local.js (a no-op sourced script index.html loads first; for asset-only hosts
+//      that can't edit index.html — see docs/configuration.md)
 //   3. built-in defaults
 //
 // specUrl can only come from here (it's fetched before the spec is read, so it can't live in the

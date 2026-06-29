@@ -28,6 +28,26 @@ it never edits a file inside the jar. Example:
 </script>
 ```
 
+#### Setting `SPYGLASS_CONFIG` without editing `index.html`
+
+A host that serves the shipped assets as-is — a static asset server that can't template or edit
+`index.html`, and won't fork the jar — can't add that inline `<script>`. For those hosts the explorer
+ships **`js/config.local.js`**, a no-op file that `index.html` loads as a sourced `<script>` *before*
+the app reads its configuration. Override just that one served file to set `window.SPYGLASS_CONFIG` —
+no `index.html` templating, no fork, no server-side HTML rewriting:
+
+```js
+// config.local.js  (replaces the shipped no-op)
+window.SPYGLASS_CONFIG = {
+  specUrl: '/myservice/openapi.json'
+}
+```
+
+A service hosting its OpenAPI document at `/myservice/openapi.json` and the explorer assets under
+`/myservice/explorer/` drops this single file and the explorer resolves the right spec whether or not a
+`?spec=` query param is present. The default file sets nothing, so leaving it untouched keeps the
+built-in defaults. It's a sourced (not inline) script, so it needs no CSP `'unsafe-inline'`.
+
 ### Storage keys
 
 Every key is namespaced (`storageKey('headers')` → `apidocs-headers`). The inventory:
