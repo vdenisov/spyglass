@@ -57,6 +57,21 @@ public final class ExplorerAssets {
     public static final String ENTRY_POINT = "/apidocs/index.html";
 
     /**
+     * URL path pattern under which front-end extensions serve their assets. By convention every extension
+     * ships its ES-module and siblings under {@link #EXTENSION_RESOURCE_BASE}, and the classpath merges
+     * across jars, so a single handler for this pattern enrols every extension's assets with no
+     * per-extension config. Served with the same policy as the explorer's own assets so an extension's
+     * {@code index.js} (which resolves siblings via {@code import.meta.url}) can't pin a stale module graph.
+     */
+    public static final String EXTENSION_PATH_PATTERN = "/spyglass-ext/**";
+
+    /** Classpath directory holding extension assets; merged across every extension jar on the classpath. */
+    public static final String EXTENSION_RESOURCE_BASE = "META-INF/resources/spyglass-ext/";
+
+    /** {@link #EXTENSION_RESOURCE_BASE} as a {@code classpath:} location string, for the servlet resource registry. */
+    public static final String EXTENSION_CLASSPATH_LOCATION = "classpath:/" + EXTENSION_RESOURCE_BASE;
+
+    /**
      * Memoised content ETags, keyed by asset identity ({@link Resource#getDescription()}) and holding the
      * hash alongside the last-modified time it was computed for. The assets are immutable within a JVM run
      * (served from a fat jar in production), so this hashes each one once rather than on every
@@ -79,6 +94,17 @@ public final class ExplorerAssets {
      */
     public static ClassPathResource location() {
         return new ClassPathResource(RESOURCE_BASE);
+    }
+
+    /**
+     * The extension asset location as a {@link Resource}, for the reactive adapter — the
+     * {@link #EXTENSION_RESOURCE_BASE} twin of {@link #location()}. The directory need not exist (a host
+     * with no extensions has no such resource); the handler then simply 404s, which is harmless.
+     *
+     * @return the classpath extension-asset directory
+     */
+    public static ClassPathResource extensionLocation() {
+        return new ClassPathResource(EXTENSION_RESOURCE_BASE);
     }
 
     /**

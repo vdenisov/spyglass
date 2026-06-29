@@ -12,7 +12,11 @@ framework knows what to provide.
 ## What any adapter must provide
 
 1. **Serve the core assets** at `/apidocs/**`, from `spyglass-core`'s
-   `META-INF/resources/apidocs/**`.
+   `META-INF/resources/apidocs/**`, **and** front-end extension assets at `/spyglass-ext/**`, from
+   `META-INF/resources/spyglass-ext/**`. Both are served with a revalidate-on-reuse cache policy
+   (`Cache-Control: no-cache` + a content ETag, `Last-Modified` disabled) so a redeploy is picked up
+   without a hard refresh. Because the classpath merges `spyglass-ext/` across jars, one handler enrols
+   every extension's assets with no per-extension config.
 
 2. **Make the OpenAPI document carry the Spyglass customizations** — register an `Authorization`
    header security scheme (and require it), set a default title when the host hasn't, and add the
@@ -33,8 +37,12 @@ framework knows what to provide.
 
 ## How the Spring adapters realize it
 
-- **Asset serving** is automatic: Boot serves `META-INF/resources` on classpath presence, so the
-  Spring adapters register **no** resource handler.
+- **Asset serving** registers a dedicated resource handler for each convention root (`/apidocs/**` and
+  `/spyglass-ext/**`) carrying the no-cache + content-ETag policy (the shared, stack-neutral
+  `ExplorerAssets` in `spyglass-spring-core` supplies it; the per-stack `ExplorerAssetHandlers` helper
+  wires it). Boot would serve `META-INF/resources` on classpath presence alone, but its defaults send no
+  `Cache-Control`, which lets browsers miss a redeploy — hence the explicit handlers. An extension on a
+  non-conventional path applies the same policy in one call through that helper.
 - **Document customization** is the stack-neutral `SpyglassOpenApiCustomizer` (in
   `spyglass-spring-core`), registered as a springdoc `OpenApiCustomizer` bean. It targets the
   springdoc-**common** SPI and the `io.swagger.v3.oas.models` model — both stable across

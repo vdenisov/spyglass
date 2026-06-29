@@ -3,7 +3,6 @@ package org.plukh.spyglass.spring.webflux;
 import org.plukh.spyglass.spring.core.ExplorerAssets;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.server.HandlerFunction;
 import org.springframework.web.reactive.function.server.RouterFunction;
@@ -13,7 +12,6 @@ import org.springframework.web.reactive.handler.SimpleUrlHandlerMapping;
 import org.springframework.web.reactive.resource.ResourceWebHandler;
 
 import java.net.URI;
-import java.util.List;
 import java.util.Map;
 
 import static org.springframework.web.reactive.function.server.RequestPredicates.GET;
@@ -26,7 +24,10 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
  * serve them on classpath presence alone, but its defaults send no {@code Cache-Control}, which lets
  * browsers cache the JS heuristically and miss a redeploy until a hard refresh. So a dedicated handler for
  * {@code /apidocs/**} attaches {@code Cache-Control: no-cache} plus a content ETag (see
- * {@link ExplorerAssets} for the rationale).
+ * {@link ExplorerAssets} for the rationale). The same policy is mapped for {@code /spyglass-ext/**} so every
+ * front-end extension's assets are served fresh too — one handler enrols every extension on the classpath,
+ * with no per-extension config. An extension serving from a non-conventional path can apply the identical
+ * policy via {@link ExplorerAssetHandlers#mapping}.
  *
  * <p>Both pieces are plain beans rather than a {@code WebFluxConfigurer}: the latter, unlike an ordinary
  * bean, can clobber a host's global CORS configuration — which matters for reactive services that register
@@ -58,25 +59,18 @@ public class SpyglassWebFluxConfig {
 
     @Bean
     public SimpleUrlHandlerMapping spyglassAssetHandlerMapping() throws Exception {
-        // Serve the explorer assets with no-cache + a content ETag so a redeploy is picked up without a
-        // hard refresh. Last-Modified is disabled because the reproducible-build fat jar pins it (see
-        // ExplorerAssets); the content ETag is the sole validator.
-        ResourceWebHandler handler = new ResourceWebHandler();
-        handler.setLocations(List.of(ExplorerAssets.location()));
-        handler.setCacheControl(ExplorerAssets.cacheControl());
-        handler.setUseLastModified(false);
-        handler.setEtagGenerator(ExplorerAssets.etagGenerator());
-        // Wires the default PathResourceResolver chain; required before the handler can serve.
-        handler.afterPropertiesSet();
-        // Load-bearing ordering invariant: one step ahead of the default reactive resource handler mapping
-        // (registered by WebFluxConfigurationSupport at LOWEST_PRECEDENCE - 1) so our cache-configured
-        // handler wins for /apidocs/**, while the redirect RouterFunction (RouterFunctionMapping, order -1)
-        // still handles the exact /apidocs and /apidocs/ paths. Unlike the servlet adapter — where the
-        // ResourceHandlerRegistry tie-breaks /apidocs/** over /** by pattern specificity — precedence here
-        // is purely by integer order, so a host mapping registered at this order or higher precedence with
-        // an overlapping pattern would shadow this one and silently restore the default (no-cache-header)
-        // serving. Keep this strictly between the redirect mapping and the default resource mapping.
-        return new SimpleUrlHandlerMapping(
-                Map.of(ExplorerAssets.PATH_PATTERN, handler), Ordered.LOWEST_PRECEDENCE - 2);
+        // Serve the explorer's own assets and every extension's assets with no-cache + a content ETag so a
+        // redeploy is picked up without a hard refresh. Last-Modified is disabled because the
+        // reproducible-build fat jar pins it (see ExplorerAssets); the content ETag is the sole validator.
+        // Both convention roots share one mapping (distinct patterns, one handler each), at the shared
+        // ExplorerAssetHandlers.ASSET_MAPPING_ORDER (see there for the load-bearing ordering invariant).
+        // Note: precedence here is purely by integer order — unlike the servlet adapter, where the
+        // ResourceHandlerRegistry tie-breaks these over /** by pattern specificity — so a host mapping at
+        // this order or higher precedence with an overlapping pattern would shadow this one and silently
+        // restore the default (no-cache-header) serving.
+        return new SimpleUrlHandlerMapping(Map.of(
+                ExplorerAssets.PATH_PATTERN, ExplorerAssetHandlers.handler(ExplorerAssets.location()),
+                ExplorerAssets.EXTENSION_PATH_PATTERN, ExplorerAssetHandlers.handler(ExplorerAssets.extensionLocation())),
+                ExplorerAssetHandlers.ASSET_MAPPING_ORDER);
     }
 }

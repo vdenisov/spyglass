@@ -32,6 +32,22 @@ arbitrary third-party ESM into the explorer's origin. Modules are imported in pa
 `register`-ed in list order, so precedence is deterministic (e.g. the first non-null header-link
 resolver wins).
 
+## Serving extension assets
+
+By convention an extension ships its module and siblings under `META-INF/resources/spyglass-ext/<name>/`,
+served at `/spyglass-ext/<name>/…`. The Spring adapters serve this convention root with the same
+revalidate-on-reuse cache policy as the explorer's own assets — `Cache-Control: no-cache` plus a
+content-derived ETag, `Last-Modified` disabled — so a redeployed extension is picked up without a hard
+refresh (an unchanged file revalidates to a cheap `304`). The classpath merges `spyglass-ext/` across jars,
+so **one handler enrols every extension's assets with no per-extension config**. This matters most for
+extensions: a module's `import.meta.url` sibling resolution means one stale `index.js` would otherwise pin a
+stale module graph.
+
+An extension that serves assets from a non-conventional path (not under `/spyglass-ext/**`) can apply the
+identical policy in one call via the adapter helper — `ExplorerAssetHandlers.register(registry, pattern,
+location)` on the servlet adapter, or `ExplorerAssetHandlers.mapping(pattern, location)` (as a bean) on the
+reactive adapter.
+
 ## The `api` surface
 
 `register(api)` receives:
