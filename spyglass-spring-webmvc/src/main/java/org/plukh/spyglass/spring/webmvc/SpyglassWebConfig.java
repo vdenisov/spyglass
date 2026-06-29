@@ -17,6 +17,11 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * {@link ExplorerAssets} for the rationale). Its pattern is more specific than the default {@code /**}
  * handler, so it wins for the explorer assets while leaving all other static resources untouched.
  *
+ * <p>The same policy is registered for {@code /spyglass-ext/**} so every front-end extension's assets are
+ * served fresh too — the classpath merges {@code META-INF/resources/spyglass-ext/} across extension jars,
+ * so one handler enrols them all with no per-extension config. An extension serving from a non-conventional
+ * path can apply the identical policy via {@link ExplorerAssetHandlers#register}.
+ *
  * <p>The remaining mappings are the convenience redirects: each friendly path is a {@code 302 Found} to
  * the static entry point (matching the reactive adapter, which emits the same status for the same paths).
  *
@@ -29,14 +34,12 @@ public class SpyglassWebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // Serve the explorer assets with no-cache + a content ETag so a redeploy is picked up without a
-        // hard refresh. Last-Modified is disabled because the reproducible-build fat jar pins it (see
-        // ExplorerAssets); the content ETag is the sole validator.
-        registry.addResourceHandler(ExplorerAssets.PATH_PATTERN)
-                .addResourceLocations(ExplorerAssets.CLASSPATH_LOCATION)
-                .setCacheControl(ExplorerAssets.cacheControl())
-                .setUseLastModified(false)
-                .setEtagGenerator(ExplorerAssets.etagGenerator());
+        // Serve the explorer's own assets and every extension's assets with no-cache + a content ETag so a
+        // redeploy is picked up without a hard refresh. Last-Modified is disabled because the
+        // reproducible-build fat jar pins it (see ExplorerAssets); the content ETag is the sole validator.
+        ExplorerAssetHandlers.register(registry, ExplorerAssets.PATH_PATTERN, ExplorerAssets.CLASSPATH_LOCATION);
+        ExplorerAssetHandlers.register(registry,
+                ExplorerAssets.EXTENSION_PATH_PATTERN, ExplorerAssets.EXTENSION_CLASSPATH_LOCATION);
     }
 
     @Override

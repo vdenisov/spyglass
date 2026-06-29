@@ -6,9 +6,11 @@ import spock.lang.Specification
 /**
  * Shared base for the explorer's asset-caching specs across every Spring adapter. Drives the running app
  * over real HTTP (a plain {@link HttpURLConnection}, no browser) and asserts the revalidate-on-reuse cache
- * policy applied to the explorer's static assets: {@code Cache-Control: no-cache} forces revalidation, a
- * content ETag yields a cheap {@code 304} when the bytes are unchanged, and {@code Last-Modified} is
- * suppressed (it would be pinned by the reproducible-build jar). See {@code ExplorerAssets} for the why.
+ * policy applied to the explorer's static assets &mdash; both the core assets under {@code /apidocs/**} and
+ * front-end extension assets under {@code /spyglass-ext/**} (exercised through the shared {@code cache-probe}
+ * fixture this module ships): {@code Cache-Control: no-cache} forces revalidation, a content ETag yields a
+ * cheap {@code 304} when the bytes are unchanged, and {@code Last-Modified} is suppressed (it would be
+ * pinned by the reproducible-build jar). See {@code ExplorerAssets} for the why.
  *
  * <p>Like {@link ExplorerBrowserSpecBase} this base is <strong>stack-neutral</strong> and
  * <strong>Boot-version-neutral</strong>: it carries no {@code @SpringBootTest} and references no test
@@ -53,6 +55,28 @@ abstract class ExplorerAssetCachingSpecBase extends Specification {
         then:
         conn.responseCode == 302
         conn.getHeaderField('Location').endsWith('/apidocs/index.html')
+    }
+
+    def "extension assets are served with the same no-cache + weak content ETag policy, no Last-Modified"() {
+        when: 'an extension asset under the /spyglass-ext/** convention root (the shared cache-probe fixture)'
+        def conn = get('/spyglass-ext/cache-probe/index.js')
+
+        then: 'it carries the identical policy as the core assets, so a redeploy is picked up without a hard refresh'
+        conn.responseCode == 200
+        conn.getHeaderField('Cache-Control') == 'no-cache'
+        conn.getHeaderField('ETag') ==~ /W\/".+"/
+        conn.getHeaderField('Last-Modified') == null
+    }
+
+    def "a conditional request for an extension asset matching the ETag revalidates to 304 Not Modified"() {
+        given: 'the ETag the server advertises for the extension asset'
+        def etag = get('/spyglass-ext/cache-probe/index.js').getHeaderField('ETag')
+
+        when: 'the browser re-requests with that ETag'
+        def conn = get('/spyglass-ext/cache-probe/index.js', etag)
+
+        then: 'the asset is unchanged, so it revalidates to 304'
+        conn.responseCode == 304
     }
 
     private HttpURLConnection get(String path, String ifNoneMatch = null) {
