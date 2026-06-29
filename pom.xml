@@ -89,6 +89,20 @@
         <central-publishing-maven-plugin.version>0.11.0</central-publishing-maven-plugin.version>
 
         <!--
+            Null-safety. JSpecify annotations declare the contract on the public API (a tiny, zero-transitive
+            compile dependency that legitimately ships in the published POM); NullAway, run as an Error Prone
+            check, enforces it at compile time. The wiring is delegated to nullability-maven-plugin, which
+            injects Error Prone + NullAway into the compiler and supplies the jdk.compiler module-access flags
+            (the add-exports/add-opens set) Error Prone needs on a modern JDK, so no .mvn/jvm.config is
+            required. The Error Prone / NullAway coordinates are pinned for reproducibility rather than left to
+            the plugin's managed defaults. JSpecify mode needs JDK 22+ (this build targets 21 but compiles on 25).
+        -->
+        <jspecify.version>1.0.0</jspecify.version>
+        <errorprone.version>2.50.0</errorprone.version>
+        <nullaway.version>0.13.7</nullaway.version>
+        <nullability-maven-plugin.version>0.4.1</nullability-maven-plugin.version>
+
+        <!--
             Fixed build timestamp for reproducible artifacts (Maven Reproducible Builds). Bump to the
             release date when cutting a release; a stale value only affects archive entry timestamps,
             not behaviour.
@@ -133,6 +147,13 @@
                 <version>${springdoc.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <!-- JSpecify nullness annotations, used on the public API of every Java module. -->
+            <dependency>
+                <groupId>org.jspecify</groupId>
+                <artifactId>jspecify</artifactId>
+                <version>${jspecify.version}</version>
             </dependency>
 
             <!-- Browser automation for the explorer specs (names ending in "AE"). -->
@@ -280,6 +301,33 @@
                             </includes>
                             <skipITs>${skipBrowserTests}</skipITs>
                         </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!--
+                Null-safety enforcement. As a build extension, this reconfigures the inherited
+                maven-compiler-plugin in every module: it adds Error Prone + NullAway to the annotation
+                processor path and contributes the javac/JVM flags they require (including the jdk.compiler
+                module-access flags that Error Prone needs on a modern JDK). Defaults are jspecifyMode
+                + severity=error + checking=main, which is what we want; Error Prone and NullAway are pinned
+                rather than left to the plugin's managed defaults. NullAway then checks only @NullMarked
+                packages (see each module's package-info.java); modules with no Java sources (spyglass-core,
+                the Groovy test-support) are a harmless no-op.
+            -->
+            <plugin>
+                <groupId>am.ik.maven</groupId>
+                <artifactId>nullability-maven-plugin</artifactId>
+                <version>${nullability-maven-plugin.version}</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <errorProneVersion>${errorprone.version}</errorProneVersion>
+                    <nullAwayVersion>${nullaway.version}</nullAwayVersion>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>configure</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>

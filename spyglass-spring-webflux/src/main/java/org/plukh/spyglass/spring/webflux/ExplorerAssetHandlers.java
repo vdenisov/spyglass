@@ -50,6 +50,11 @@ public final class ExplorerAssetHandlers {
      *
      * @throws Exception if the handler fails to initialise
      */
+    // Spring's setEtagGenerator accepts a generator that may return null (it then omits the ETag), but its
+    // parameter type doesn't mark the function's String result @Nullable. Passing our honest
+    // Function<Resource, @Nullable String> therefore trips NullAway on the JSpecify-annotated Spring (Boot 4)
+    // leg; the suppression is scoped to this handler-wiring method.
+    @SuppressWarnings("NullAway")
     public static ResourceWebHandler handler(Resource location) throws Exception {
         ResourceWebHandler handler = new ResourceWebHandler();
         handler.setLocations(List.of(location));

@@ -19,6 +19,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.Builder;
 import lombok.Value;
+import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -509,7 +510,7 @@ public class DemoController {
         String sessionToken;
 
         @Schema(description = "The non-sensitive note, echoed back.")
-        String note;
+        @Nullable String note;
     }
 
     /**
@@ -607,26 +608,26 @@ public class DemoController {
     public static class Settings {
 
         @Schema(description = "The settings profile id.", requiredMode = Schema.RequiredMode.REQUIRED)
-        private String id;
+        private @Nullable String id;
 
         @Schema(description = "An optional display label.")
-        private String label;
+        private @Nullable String label;
 
         private final Map<String, String> extra = new LinkedHashMap<>();
 
-        public String getId() {
+        public @Nullable String getId() {
             return id;
         }
 
-        public void setId(String id) {
+        public void setId(@Nullable String id) {
             this.id = id;
         }
 
-        public String getLabel() {
+        public @Nullable String getLabel() {
             return label;
         }
 
-        public void setLabel(String label) {
+        public void setLabel(@Nullable String label) {
             this.label = label;
         }
 
@@ -911,7 +912,7 @@ public class DemoController {
         String message;
 
         @Schema(description = "The accompanying text field, if any.")
-        String note;
+        @Nullable String note;
 
         @Schema(description = "Number of files received.")
         int fileCount;
@@ -931,10 +932,10 @@ public class DemoController {
     public static class FileInfo {
 
         @Schema(description = "Original file name.")
-        String name;
+        @Nullable String name;
 
         @Schema(description = "Reported content type.")
-        String contentType;
+        @Nullable String contentType;
 
         @Schema(description = "File size in bytes.")
         long size;

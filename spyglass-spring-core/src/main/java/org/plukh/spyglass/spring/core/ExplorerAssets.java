@@ -1,5 +1,6 @@
 package org.plukh.spyglass.spring.core;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
@@ -128,7 +129,7 @@ public final class ExplorerAssets {
      *
      * @return the ETag generator function
      */
-    public static Function<Resource, String> etagGenerator() {
+    public static Function<Resource, @Nullable String> etagGenerator() {
         return resource -> {
             long lastModified;
             try {
@@ -151,7 +152,7 @@ public final class ExplorerAssets {
         };
     }
 
-    private static String weakEtag(Resource resource) {
+    private static @Nullable String weakEtag(Resource resource) {
         try (InputStream in = resource.getInputStream()) {
             // The "W/" prefix is preserved verbatim by Spring's ETag formatting, yielding a weak validator.
             return "W/\"" + DigestUtils.md5DigestAsHex(in) + "\"";
