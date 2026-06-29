@@ -37,6 +37,12 @@
     </properties>
 
     <dependencies>
+        <!-- JSpecify nullness annotations, used directly by this module's package-info. -->
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+        </dependency>
+
         <!-- The servlet adapter: brings spyglass-spring-core + spyglass-core assets and SpyglassConfiguration. -->
         <dependency>
             <groupId>org.plukh.spyglass</groupId>

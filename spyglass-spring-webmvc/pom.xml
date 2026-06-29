@@ -19,6 +19,12 @@
     </description>
 
     <dependencies>
+        <!-- JSpecify nullness annotations, used directly by this adapter's package-info / API. -->
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.plukh.spyglass</groupId>
             <artifactId>spyglass-spring-core</artifactId>

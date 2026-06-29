@@ -5,6 +5,7 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import org.jspecify.annotations.Nullable;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.util.StringUtils;
 
@@ -51,13 +52,13 @@ public class SpyglassOpenApiCustomizer implements OpenApiCustomizer {
     private final String applicationName;
 
     /** The build version to fill into {@code info.version} when it's unset, or {@code null} to leave it. */
-    private final String buildVersion;
+    private final @Nullable String buildVersion;
 
     public SpyglassOpenApiCustomizer(String applicationName) {
         this(applicationName, null);
     }
 
-    public SpyglassOpenApiCustomizer(String applicationName, String buildVersion) {
+    public SpyglassOpenApiCustomizer(String applicationName, @Nullable String buildVersion) {
         this.applicationName = applicationName;
         this.buildVersion = buildVersion;
     }

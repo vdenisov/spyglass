@@ -20,6 +20,13 @@
     </description>
 
     <dependencies>
+        <!-- JSpecify nullness annotations: the public API's null-safety contract (compile scope, so it
+             ships in the POM for consumers and tools). NullAway enforces it — see the parent pom. -->
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+        </dependency>
+
         <!-- Carries the front-end assets; consumers of an adapter get them transitively. -->
         <dependency>
             <groupId>org.plukh.spyglass</groupId>

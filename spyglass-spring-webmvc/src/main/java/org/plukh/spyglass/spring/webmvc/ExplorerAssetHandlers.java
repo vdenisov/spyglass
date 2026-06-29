@@ -31,6 +31,11 @@ public final class ExplorerAssetHandlers {
      * @param pattern          the URL path pattern to serve (e.g. {@code /spyglass-ext/**})
      * @param classpathLocation the {@code classpath:} location string holding the assets
      */
+    // Spring's setEtagGenerator accepts a generator that may return null (it then omits the ETag), but its
+    // parameter type doesn't mark the function's String result @Nullable. Passing our honest
+    // Function<Resource, @Nullable String> therefore trips NullAway on the JSpecify-annotated Spring (Boot 4)
+    // leg; the suppression is scoped to this one-line wiring call.
+    @SuppressWarnings("NullAway")
     public static void register(ResourceHandlerRegistry registry, String pattern, String classpathLocation) {
         registry.addResourceHandler(pattern)
                 .addResourceLocations(classpathLocation)
