@@ -1,5 +1,6 @@
 import { ref, computed, watch, onMounted, onUpdated, onBeforeUnmount } from 'vue'
 import { VERSION } from '../version.js'
+import { registry } from '../extensions.js'
 
 // --- filter ranking ---------------------------------------------------------
 // While a filter is active the sidebar abandons tag grouping for a relevance-ranked, sectioned
@@ -87,7 +88,8 @@ export default {
     operations: { type: Array, required: true },
     selectedId: { type: String, default: '' },
     title: { type: String, default: 'API' },
-    loading: { type: Boolean, default: false }
+    loading: { type: Boolean, default: false },
+    brandingShow: { type: Boolean, default: true }
   },
   emits: ['select'],
   setup(props, { emit }) {
@@ -301,7 +303,8 @@ export default {
     return {
       filter, filterInput, rootEl, filtering, groups, sections, flatOps, kbActive, isActiveIndex,
       isHighlighted, opLabel, methodParts, pathParts, snippetParts,
-      onFilterKeydown, onOpKeydown, choose, clearFilter, onFocusin, onFocusout, onSidebarMousedown, version
+      onFilterKeydown, onOpKeydown, choose, clearFilter, onFocusin, onFocusout, onSidebarMousedown, version,
+      footerItems: registry.footerItems
     }
   },
   template: `
@@ -348,13 +351,16 @@ export default {
         <div v-if="loading" class="hint">Loading spec…</div>
         <div v-else-if="!flatOps.length" class="hint">No operations match.</div>
       </div>
-      <div class="sidebar-foot">
-        <span class="foot-brand"><span class="foot-name">Spyglass</span> · OpenAPI Explorer</span>
-        <span class="foot-meta">
-          <span v-if="version" class="foot-version">v{{ version }}</span>
-          <a class="foot-link" href="https://github.com/vdenisov/spyglass" target="_blank" rel="noopener"
-             v-tip="'github.com/vdenisov/spyglass'">GitHub ↗</a>
-        </span>
+      <div class="sidebar-foot" v-if="brandingShow || footerItems.length">
+        <template v-if="brandingShow">
+          <span class="foot-brand"><span class="foot-name">Spyglass</span> · OpenAPI Explorer</span>
+          <span class="foot-meta">
+            <span v-if="version" class="foot-version">v{{ version }}</span>
+            <a class="foot-link" href="https://github.com/vdenisov/spyglass" target="_blank" rel="noopener"
+               v-tip="'github.com/vdenisov/spyglass'">GitHub ↗</a>
+          </span>
+        </template>
+        <component v-for="(item, i) in footerItems" :is="item" :key="'f' + i" class="foot-item" />
       </div>
     </aside>
   `

@@ -1,7 +1,7 @@
 // Consumer-neutral probe extension for the front-end seam tests (ExtensionSeamAE, TraceLinkAE). It
 // exercises every seam hook with no consumer coupling: it registers a header preset, an auth panel
-// (which drives the Authorization row through api.headers), and a header-link resolver that turns the
-// x-probe-trace response header into a link. Loaded via ?ext=/spyglass-ext/probe/index.js.
+// (which drives the Authorization row through api.headers), a header-link resolver that turns the
+// x-probe-trace response header into a link, and a footer item. Loaded via ?ext=/spyglass-ext/probe/index.js.
 import { h } from 'vue'
 
 export function register(api) {
@@ -13,6 +13,13 @@ export function register(api) {
     name.toLowerCase() === 'x-probe-trace'
       ? 'https://logs.test.local/?h=' + encodeURIComponent(name) + '&v=' + encodeURIComponent(value)
       : null)
+
+  api.ui.registerFooterItem({
+    name: 'ProbeFooterItem',
+    setup() {
+      return () => h('span', { class: 'probe-foot-marker' }, 'probe-footer-item')
+    }
+  })
 
   api.ui.registerAuthPanel({
     name: 'ProbePanel',

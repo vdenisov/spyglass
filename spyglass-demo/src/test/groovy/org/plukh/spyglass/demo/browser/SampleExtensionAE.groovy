@@ -12,9 +12,9 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
  * End-to-end check of the bundled, self-contained sample extension (served from
  * {@code /spyglass-ext/demo/index.js} and advertised by the demo spec's {@code x-spyglass-extensions}
  * info extension). Unlike {@code ExtensionSeamAE} — which loads the test probe via {@code ?ext=} — this
- * proves the spec-advertised, auto-load path with no query param, and exercises all three seam hooks the
- * sample registers: an auth panel, a header preset, and a response-header link resolver. It doubles as
- * the capture point for the README screenshot.
+ * proves the spec-advertised, auto-load path with no query param, and exercises the seam hooks the
+ * sample registers: an auth panel, a header preset, a response-header link resolver, and a footer item.
+ * It doubles as the capture point for the README screenshot.
  */
 class SampleExtensionAE extends SpyglassDemoSpecBase {
 
@@ -46,6 +46,14 @@ class SampleExtensionAE extends SpyglassDemoSpecBase {
 
         then:
         assertThat(authValueInput()).hasValue('demo-token')
+    }
+
+    def "the sample extension's footer item renders in the sidebar footer"() {
+        when:
+        open()
+
+        then:
+        assertThat(page.locator('.sidebar-foot .demo-foot-marker')).containsText('Demo Extension')
     }
 
     def "the sample resolver turns the demo trace response header into an in-app link"() {

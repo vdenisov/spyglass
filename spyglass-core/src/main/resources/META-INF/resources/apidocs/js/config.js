@@ -177,6 +177,50 @@ export function resolveRequestLogConfig(spec) {
   }
 }
 
+// Branding configuration (see Sidebar.js footer): the explorer ships with its own footer mark
+// (name · OpenAPI Explorer, build version, GitHub link). Spyglass is MIT-licensed and meant to be
+// embedded, so a white-label host turns that mark off without forking — the standard config chain,
+// no separate trust model (everything here is same-origin). An extension that wants to *add* its own
+// footer content uses the registerFooterItem seam hook instead; this flag only governs the built-in
+// mark. Resolved separately from CONFIG, like the update check / request log, because the spec layer
+// (x-spyglass-config.branding) isn't known until the spec loads; App.js calls resolveBrandingConfig
+// after loadSpec and hands `show` to the Sidebar.
+const BRANDING_DEFAULTS = { show: true }
+
+// Flat query-param override: ?branding=on|true|1|yes -> show; ?branding=off|false|0|no -> hide;
+// anything else (incl. a bare ?branding) is ignored so the lower-priority operator layer stands —
+// reuses the Request Log's strict parseToggle (branding is an explicit operator switch, not a token
+// that should flip on its mere presence).
+function brandingFromParams() {
+  const out = {}
+  const flag = parseToggle(params.get('branding'))
+  if (flag != null) out.show = flag
+  return out
+}
+
+// Takes only the known branding key from a config layer (defends against an operator/spec passing
+// stray or wrong-typed fields), mirroring pickRequestLog / pickUpdateCheck.
+function pickBranding(layer) {
+  if (!layer || typeof layer !== 'object') return {}
+  const out = {}
+  if ('show' in layer) out.show = !!layer.show
+  return out
+}
+
+// Folds the branding config layers, lowest priority first:
+//   defaults < spec info['x-spyglass-config'].branding < window.SPYGLASS_CONFIG.branding < query
+// Operator-supplied layers (global/query) win over the spec, mirroring the other resolvers.
+export function resolveBrandingConfig(spec) {
+  const specConfig = spec && spec.info && spec.info['x-spyglass-config']
+  const specLayer = specConfig && typeof specConfig === 'object' ? specConfig.branding : null
+  return {
+    ...BRANDING_DEFAULTS,
+    ...pickBranding(specLayer),
+    ...pickBranding(overrides.branding),
+    ...brandingFromParams()
+  }
+}
+
 // Whether a URL is same-origin: a relative path, or an absolute URL whose origin matches the page.
 // Used to gate two author-supplied-and-thus-less-trusted inputs against operator-supplied ones: the
 // ?spec= query param (above) and the spec's x-spyglass-extensions list — an absolute cross-origin URL

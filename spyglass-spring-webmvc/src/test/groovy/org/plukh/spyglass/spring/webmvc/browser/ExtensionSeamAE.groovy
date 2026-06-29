@@ -38,6 +38,14 @@ class ExtensionSeamAE extends SpyglassSpecBase {
         assertThat(page.locator('.he-row .he-key').last()).hasValue('X-Probe-Header')
     }
 
+    def "the extension's registered footer item renders in the sidebar footer"() {
+        when:
+        openWithProbe()
+
+        then:
+        assertThat(page.locator('.sidebar-foot .probe-foot-marker')).hasText('probe-footer-item')
+    }
+
     def "the extension panel drives the Authorization row through the seam"() {
         given:
         openWithProbe()
@@ -56,6 +64,7 @@ class ExtensionSeamAE extends SpyglassSpecBase {
         then:
         page.locator('.probe-panel').count() == 0
         page.locator('.he-platform').count() == 0
+        page.locator('.probe-foot-marker').count() == 0
     }
 
     def "loads a same-origin extension advertised by the spec, but never fetches a cross-origin one"() {
