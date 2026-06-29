@@ -85,6 +85,40 @@ below), so an operator can tune it server-side with no inline script. Precedence
 > too — kept fresh by the `Cache-Control: no-cache` + content-ETag the adapters serve on `/apidocs/**` —
 > and enabling `server.compression` shrinks each spec poll.
 
+### Request Log
+
+The explorer keeps a per-operation **Request Log**: below each operation's response, a folded list of
+that operation's own past executions (**timestamp · status · size**) that expand in place to the full
+stored request and response and can be replayed back into the form. History lives in IndexedDB (its own
+origin-scoped quota), scoped per operation; secrets are redacted **before** anything is written (the
+`Authorization` header is masked, and an embedding service can redact more through the
+[sanitizer hook](extension-seam.md#redacting-the-request-log)). On by default — justified by that
+write-time redaction — and disabled with a single switch for kiosk / shared machines, after which
+nothing is written and the panel is hidden.
+
+| Setting | Query param | `SPYGLASS_CONFIG` key | Default | Notes |
+| --- | --- | --- | --- | --- |
+| Enabled | `?requestLog=off` | `requestLog.enabled` | `true` | When off, nothing is persisted and the panel is hidden. |
+| Display fold | `?requestLogFoldN=` | `requestLog.foldN` | `5` | How many entries show before the "… +X more" fold (display only — not eviction). |
+| Per-operation cap | `?requestLogPerOpCap=` | `requestLog.perOpCap` | `25` | Entries retained per operation (the primary bound); oldest evicted first. |
+| Body-truncation threshold (bytes) | `?requestLogBodyCap=` | `requestLog.bodyCap` | `32768` | Request/response bodies at/under this size are stored verbatim; larger ones become a byte-count placeholder. |
+| Global count cap | `?requestLogGlobalCount=` | `requestLog.globalCountCap` | `500` | Total entries across all operations. |
+| Global byte cap (bytes) | `?requestLogGlobalBytes=` | `requestLog.globalBytesCap` | `5242880` | ~5 MB of stored record footprint. |
+
+Numeric values are taken only when finite and strictly positive; a `0`/negative/non-numeric value falls
+through to the next layer. Like the update check, the Request Log also accepts a **spec-supplied** layer
+via `x-spyglass-config.requestLog` (see below). Precedence, lowest to highest:
+
+**built-in default → spec `x-spyglass-config.requestLog` → `window.SPYGLASS_CONFIG.requestLog` → URL query parameter.**
+
+```html
+<script>
+  window.SPYGLASS_CONFIG = {
+    requestLog: { enabled: false }   // e.g. a shared kiosk — keep nothing on disk
+  }
+</script>
+```
+
 ## OpenAPI `info` extension catalog (`x-*`)
 
 The **mechanism** — emit/consume `x-*` keys on the document's `info` object — is part of the core. The
@@ -94,7 +128,7 @@ core consumes and emits two generic keys; other keys are populated by whatever e
 | --- | --- | --- | --- |
 | `x-service-name` | emitted | the core (`SpyglassOpenApiCustomizer`, from `spring.application.name`) | Informational service name. |
 | `x-spyglass-extensions` | **consumed** by core | whichever customizer supplies extensions (e.g. the demo's `DemoEndpointsConfiguration`, or an extension pack) | A list of ESM extension-module URLs to load. Spec-supplied entries are **same-origin only** (operator-supplied lists via `?ext=`/`SPYGLASS_CONFIG` are trusted anywhere). |
-| `x-spyglass-config` | **consumed** by core | whichever customizer supplies it (e.g. the demo sets the update-check interval) | A nested config object the front end folds **under** the operator layers (`SPYGLASS_CONFIG`/query win). Currently carries `updateCheck` — see [Update check](#update-check). |
+| `x-spyglass-config` | **consumed** by core | whichever customizer supplies it (e.g. the demo sets the update-check interval) | A nested config object the front end folds **under** the operator layers (`SPYGLASS_CONFIG`/query win). Carries `updateCheck` — see [Update check](#update-check) — and `requestLog` — see [Request Log](#request-log). |
 
 An extension can populate further keys against the same mechanism — e.g. a mint-endpoint path or a
 deep-link config — read by its own front-end extension modules, not by the core.

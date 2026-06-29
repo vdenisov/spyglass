@@ -14,7 +14,7 @@
 // reused, so insertion order equals key order regardless of wall-clock resolution or same-millisecond
 // collisions; eviction always removes the lowest ids (the oldest). The stored `ts` is for display only.
 
-import { storageKey } from './config.js'
+import { storageKey, REQUEST_LOG_DEFAULTS } from './config.js'
 
 const DB_NAME = storageKey('request-log')
 const STORE = 'records'
@@ -25,10 +25,21 @@ const TOTALS_KEY = 'totals'   // the singleton meta row: { k: 'totals', bytes }
 // an operation's keys — an array sorts after any number, so [opId, []] is greater than every [opId, id].
 const OP_INDEX = 'opId_id'
 
-// Capacity bounds — tunable defaults kept as module constants.
-const PER_OP_CAP = 25                       // primary bound: entries kept per operation
-const GLOBAL_COUNT_CAP = 500                // total entries across all operations
-const GLOBAL_BYTES_CAP = 5 * 1024 * 1024    // ~5 MB of stored record footprint
+// Capacity bounds — mutable so the host can retune them through the config seam (config.js → App.js →
+// configureRequestLog → configureStore), seeded from the single source of truth in config.js so the
+// fallbacks can't drift from the documented defaults. Replaced by configureStore; an unset/invalid
+// layer leaves the seeded default in place.
+let PER_OP_CAP = REQUEST_LOG_DEFAULTS.perOpCap            // primary bound: entries kept per operation
+let GLOBAL_COUNT_CAP = REQUEST_LOG_DEFAULTS.globalCountCap // total entries across all operations
+let GLOBAL_BYTES_CAP = REQUEST_LOG_DEFAULTS.globalBytesCap // ~5 MB of stored record footprint
+
+// Applies host-tuned capacity bounds. Each is taken only when a positive integer, so a missing or
+// malformed value keeps the default (config.js already validates, this is belt-and-braces).
+export function configureStore({ perOpCap, globalCountCap, globalBytesCap } = {}) {
+  if (Number.isInteger(perOpCap) && perOpCap > 0) PER_OP_CAP = perOpCap
+  if (Number.isInteger(globalCountCap) && globalCountCap > 0) GLOBAL_COUNT_CAP = globalCountCap
+  if (Number.isInteger(globalBytesCap) && globalBytesCap > 0) GLOBAL_BYTES_CAP = globalBytesCap
+}
 
 // "IndexedDB unusable" sentinel — see graceful absence above.
 const DISABLED = Symbol('request-log-disabled')

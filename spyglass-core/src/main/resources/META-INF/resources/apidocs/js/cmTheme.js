@@ -23,7 +23,16 @@ export const surfaceTheme = EditorView.theme({
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--text)' },
   '.cm-scroller': { maxHeight: '320px' },
   '.cm-gutters': { backgroundColor: 'var(--bg-alt)', color: 'var(--muted)', border: 'none' },
-  '.cm-activeLine': { backgroundColor: 'var(--accent-weak)' },
-  '.cm-activeLineGutter': { backgroundColor: 'var(--accent-weak)' },
-  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: 'var(--accent-weak)' }
+  // Active-line highlight: a low-alpha wash on the line body (--cm-active-line) and a slightly stronger,
+  // same-hue fill on the gutter (--cm-active-gutter), so the two read as one band. The body sits in the
+  // content layer, above the selection layer, so its alpha is kept low enough that a selection on the
+  // cursor's line shows through. Applies to both the read-only viewer and the editable JSON editor.
+  '.cm-activeLine': { backgroundColor: 'var(--cm-active-line)' },
+  '.cm-activeLineGutter': { backgroundColor: 'var(--cm-active-gutter)' },
+  // Both the focused and unfocused selection use --cm-selection. The !important is required because
+  // CodeMirror's built-in FOCUSED selection rule (a lavender default, #d7d4f0) uses a longer, more
+  // specific selector than a plain theme override — so without it the editable editor shows CM's
+  // lavender when focused (unreadable on the dark theme), while the read-only viewer, which never gets
+  // focus, looked correct.
+  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: 'var(--cm-selection) !important' }
 })
