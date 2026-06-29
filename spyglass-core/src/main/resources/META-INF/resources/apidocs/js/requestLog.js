@@ -8,8 +8,11 @@
 //     sanitizer throws, the record is DROPPED rather than written un-redacted. (Contrast the header-link
 //     resolver hook in extensions.js, where a throw safely means "no link" — here the safe default is
 //     "don't store," because the risk is leaking a secret to disk.)
-//   - Frugal storage: large/binary bodies are truncated to a placeholder (file names kept, contents
-//     never); the record's reported response `size` still reflects the true byte count.
+//   - Frugal storage: a large/binary body is not stored verbatim — it's replaced by a small `bodyInfo`
+//     descriptor (kind, byte count, content type, filename; file CONTENTS never stored), and a multipart
+//     request by a structured parts list. The response `size` still reflects the true byte count. A
+//     stored `body` is therefore always the real text; when it's absent, `bodyInfo` describes what was
+//     elided (and `body`/`bodyInfo` are never both present).
 //
 // Records are snapshots of what was actually sent/received, bound to their operation by opId
 // ("<METHOD> <path>") — never re-derived from the live spec, so a later schema change can't corrupt a
@@ -20,13 +23,30 @@
 // like any other response. Transport failures (DNS/timeout/connection refused) and user cancels are
 // not logged — they carry no status/body to record.
 
-import { formatBytes, filenameFromDisposition } from './format.js'
-import { putRecord, getByOpId, getAll, deleteRecord, clear } from './requestLogStore.js'
+import { filenameFromDisposition } from './format.js'
+import { REQUEST_LOG_DEFAULTS } from './config.js'
+import { putRecord, getByOpId, getAll, deleteRecord, clear, configureStore } from './requestLogStore.js'
 
-// Bodies at/under this UTF-8 byte size are stored verbatim; larger ones become a byte-count placeholder.
-const BODY_CAP = 32 * 1024
+// Bodies at/under this UTF-8 byte size are stored verbatim; larger ones are elided to a bodyInfo
+// descriptor. Mutable so the host can retune it via the config seam (configureRequestLog); seeded from
+// the single source of truth in config.js.
+let BODY_CAP = REQUEST_LOG_DEFAULTS.bodyCap
+
+// Whether capture is enabled. On by default (justified by write-time sanitization); a host disables it
+// through the config seam for kiosk / shared machines, after which recordExecution writes nothing.
+let enabled = REQUEST_LOG_DEFAULTS.enabled
 
 const encoder = new TextEncoder()
+
+// Applies the resolved Request Log config (config.js → resolveRequestLogConfig). Sets the enable gate
+// and the body-truncation threshold here, and forwards the storage caps to the store. Called once at
+// startup from App.js; the caps are read live, so this may also run before any capture. config.js has
+// already validated, so the guards here are belt-and-braces.
+export function configureRequestLog(config = {}) {
+  if ('enabled' in config) enabled = !!config.enabled
+  if (Number.isInteger(config.bodyCap) && config.bodyCap > 0) BODY_CAP = config.bodyCap
+  configureStore(config)
+}
 
 // Ordered sanitizers, run on every record before persist. The core Authorization mask is always first;
 // extensions append after it via registerSanitizer. Each receives the pre-persist record and returns it
@@ -41,8 +61,12 @@ export function registerSanitizer(fn) {
 // response is the already-built es.response. Best-effort throughout: any failure is swallowed.
 export async function recordExecution({ opId, req, response, snapshot } = {}) {
   try {
+    // The single disable gate: when the feature is off nothing is captured, so no record ever reaches
+    // disk (the panel is also hidden — see App.js). Checked first, before any record is assembled.
+    if (!enabled) return
     if (!opId || !req || !response) return
     const reqContentType = req.bodyData instanceof FormData ? 'multipart/form-data' : headerValue(req.headers, 'content-type')
+    const reqParts = requestBodyParts(req, reqContentType)
     const resp = responseParts(response)
     const record = {
       ts: Date.now(),
@@ -53,7 +77,8 @@ export async function recordExecution({ opId, req, response, snapshot } = {}) {
         params: snapshot || null,
         headers: { ...(req.headers || {}) },
         contentType: reqContentType || '',
-        body: requestBody(req, reqContentType)
+        body: reqParts.body,
+        bodyInfo: reqParts.bodyInfo
       },
       response: {
         status: response.status,
@@ -63,6 +88,7 @@ export async function recordExecution({ opId, req, response, snapshot } = {}) {
         headers: headersFromList(response.headersList),
         contentType: response.contentType || '',
         body: resp.body,
+        bodyInfo: resp.bodyInfo,
         finalUrl: response.finalUrl || ''
       }
     }
@@ -119,56 +145,55 @@ function coreAuthSanitizer(record) {
   return record
 }
 
-// The stored request body. Multipart is summarized part-by-part with file CONTENTS never stored (name +
-// size + type only); any other body is text, truncated past the cap.
-function requestBody(req, contentType) {
-  if (req.bodyData instanceof FormData) return multipartSummary(req.bodyData)
-  if (req.bodyStr == null) return null
-  return truncateText(req.bodyStr, contentType)
+// The stored request body as { body, bodyInfo } (exactly one non-null, or both null for no body).
+// A within-cap text body is kept verbatim (`body`); an over-cap text body is elided to a 'truncated'
+// descriptor (the text never reaches disk). Multipart is described structurally (kind 'multipart' +
+// parts) with file CONTENTS never stored. The descriptor is what the UI renders as a plain note.
+function requestBodyParts(req, contentType) {
+  if (req.bodyData instanceof FormData) return { body: null, bodyInfo: { kind: 'multipart', parts: multipartParts(req.bodyData) } }
+  if (req.bodyStr == null) return { body: null, bodyInfo: null }
+  return textBody(req.bodyStr, contentType)
 }
 
-// The stored response body plus its true size. size is the exact wire byte count (blob.size); the body
-// is the decoded text when text-like and within the cap, otherwise a placeholder keeping a
-// Content-Disposition filename when present.
+// The stored response body as { size, body, bodyInfo }. size is the exact wire byte count (blob.size).
+// A text body within the cap is kept verbatim; an over-cap text body becomes a 'truncated' descriptor
+// and a binary/never-decoded body a 'binary' descriptor — both keeping a Content-Disposition filename
+// when present. An empty body is { body: null, bodyInfo: null }.
 function responseParts(response) {
   const size = response.blob ? response.blob.size : (response.rawBody != null ? encoder.encode(response.rawBody).length : 0)
-  const name = filenameFromDisposition(response.contentDisposition)
+  const filename = filenameFromDisposition(response.contentDisposition)
+  const ct = response.contentType || ''
   if (response.rawBody != null) {
     const n = encoder.encode(response.rawBody).length
-    return { size, body: n <= BODY_CAP ? response.rawBody : placeholder(size, response.contentType, name) }
+    if (n <= BODY_CAP) return { size, body: response.rawBody, bodyInfo: null }
+    return { size, body: null, bodyInfo: { kind: 'truncated', bytes: size, contentType: ct, ...(filename ? { filename } : {}) } }
   }
-  // Binary (never decoded) or empty.
-  return { size, body: size ? placeholder(size, response.contentType, name) : '' }
+  if (size) return { size, body: null, bodyInfo: { kind: 'binary', bytes: size, contentType: ct, ...(filename ? { filename } : {}) } }
+  return { size, body: null, bodyInfo: null }
 }
 
-// A text body: verbatim if within the cap, else a byte-count placeholder carrying the true size.
-function truncateText(text, contentType) {
-  if (text == null) return null
+// A text body as { body, bodyInfo }: verbatim if within the cap, else a 'truncated' descriptor carrying
+// the true byte count and content type (the text is dropped, never persisted).
+function textBody(text, contentType) {
   const n = encoder.encode(text).length
-  return n <= BODY_CAP ? text : placeholder(n, contentType)
+  if (n <= BODY_CAP) return { body: text, bodyInfo: null }
+  return { body: null, bodyInfo: { kind: 'truncated', bytes: n, contentType: contentType || '' } }
 }
 
-// «N bytes of <contentType>» for an inline body, or «file "name", <size> of <contentType>» when a
-// filename is known (uploads, downloads). The size keeps the log honest about how big the payload was.
-function placeholder(n, contentType, name) {
-  const of = contentType ? ' of ' + contentType : ''
-  return name ? `«file "${name}", ${formatBytes(n)}${of}»` : `«${n} bytes${of}»`
-}
-
-// Summarizes a multipart body, one line per part. File parts keep name/size/type but never their bytes;
-// text parts are kept verbatim unless they themselves exceed the body cap.
-function multipartSummary(formData) {
+// Structures a multipart body into parts. A file part keeps name/size/type but NEVER its bytes; a text
+// part keeps its value when within the cap, otherwise only its byte count.
+function multipartParts(formData) {
   const parts = []
   for (const [name, value] of formData.entries()) {
     if (value instanceof File) {
-      parts.push(`${name}: ${placeholder(value.size, value.type || 'application/octet-stream', value.name)}`)
+      parts.push({ name, filename: value.name, bytes: value.size, contentType: value.type || 'application/octet-stream' })
     } else {
       const s = String(value)
       const n = encoder.encode(s).length
-      parts.push(`${name}: ${n <= BODY_CAP ? s : placeholder(n, '')}`)
+      parts.push(n <= BODY_CAP ? { name, value: s } : { name, bytes: n })
     }
   }
-  return parts.join('\n')
+  return parts
 }
 
 // Case-insensitive header lookup over a plain {name: value} object.

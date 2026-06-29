@@ -7,9 +7,10 @@ import java.util.function.Consumer
 
 /**
  * Request Log persistence layer: each completed execution is captured as an immutable,
- * sanitized, size-bounded record in IndexedDB, scoped per operation, with FIFO eviction. There is no UI
- * yet — everything is asserted through the capture/store modules and the real IndexedDB the headless
- * browser provides (no mock). Records bind to their operation by opId ("&lt;METHOD&gt; &lt;path&gt;").
+ * sanitized, size-bounded record in IndexedDB, scoped per operation, with FIFO eviction. This spec
+ * asserts the capture/store modules directly against the real IndexedDB the headless browser provides
+ * (no mock); the user-facing panel (list, expand, replay, clear, config) is covered by
+ * {@link RequestLogUiAE}. Records bind to their operation by opId ("&lt;METHOD&gt; &lt;path&gt;").
  *
  * Capture is fire-and-forget off the render path, so assertions never read straight after Send: they
  * poll the read helper via waitForFunction (which absorbs the write latency), or call the module
@@ -50,13 +51,19 @@ class RequestLogAE extends SpyglassSpecBase {
                 snapshot: {}
             })
             const recs = await m.recordsForOp('GET /big')
-            return { count: recs.length, reqBody: recs[0].request.body, respBody: recs[0].response.body, size: recs[0].response.size }
+            return { count: recs.length, reqBody: recs[0].request.body, reqInfo: recs[0].request.bodyInfo,
+                     respBody: recs[0].response.body, respInfo: recs[0].response.bodyInfo, size: recs[0].response.size }
         }''')
 
-        then: 'both bodies become a placeholder carrying the true byte count, not the payload'
+        then: 'neither body is stored; each carries a truncated descriptor with the true byte count'
         (r.count as int) == 1
-        r.reqBody == '«40000 bytes of text/plain»'
-        r.respBody == '«40000 bytes of text/plain»'
+        r.reqBody == null
+        r.reqInfo.kind == 'truncated'
+        (r.reqInfo.bytes as int) == 40000
+        r.reqInfo.contentType == 'text/plain'
+        r.respBody == null
+        r.respInfo.kind == 'truncated'
+        (r.respInfo.bytes as int) == 40000
         (r.size as int) == 40000
     }
 
@@ -69,10 +76,12 @@ class RequestLogAE extends SpyglassSpecBase {
         when:
         captureSend('**/uploads')
 
-        then: 'the multipart summary names the file and its size but never stores its contents'
+        then: 'the multipart parts name the file and its size but never store its contents'
         def rec = waitForOneRecord('POST /uploads')
-        rec.request.body.toString().contains('hello.txt')
-        !rec.request.body.toString().contains('hi there')
+        rec.request.body == null
+        rec.request.bodyInfo.kind == 'multipart'
+        rec.request.bodyInfo.parts.any { it.filename == 'hello.txt' }
+        !rec.request.bodyInfo.parts.any { it.value?.contains('hi there') }
     }
 
     def "placeholds a binary response, keeping the Content-Disposition filename"() {
@@ -89,10 +98,12 @@ class RequestLogAE extends SpyglassSpecBase {
         page.click('.btn-send')
         page.waitForSelector('.response')
 
-        then: 'the body is a file placeholder (name + type) and size is the true byte count'
+        then: 'the body is elided to a binary descriptor (name + type) and size is the true byte count'
         def rec = waitForOneRecord('GET /widgets/{id}')
-        rec.response.body.toString().contains('server-name.bin')
-        rec.response.body.toString().contains('application/octet-stream')
+        rec.response.body == null
+        rec.response.bodyInfo.kind == 'binary'
+        rec.response.bodyInfo.filename == 'server-name.bin'
+        rec.response.bodyInfo.contentType.contains('application/octet-stream')
         (rec.response.size as int) == 'RAWBYTES'.bytes.length
     }
 
@@ -242,8 +253,8 @@ class RequestLogAE extends SpyglassSpecBase {
     }
 
     def "disables gracefully when IndexedDB is unavailable"() {
-        given:
-        open('GET-/widgets/{id}')
+        given: 'no operation selected, so the Request Log panel never mounts and the store stays unopened'
+        open()
 
         when: 'IndexedDB is shadowed before the store opens its database'
         def r = page.evaluate('''async () => {
@@ -265,16 +276,4 @@ class RequestLogAE extends SpyglassSpecBase {
         (r.recs as int) == 0
     }
 
-    def "adds no Request Log UI (persistence layer only)"() {
-        given:
-        open('GET-/widgets/{id}')
-        param('id').locator('.control input').fill('1')
-
-        when:
-        captureSend('**/widgets/**')
-        waitForOneRecord('GET /widgets/{id}')
-
-        then: 'nothing request-log-shaped is rendered'
-        page.locator('.request-log').count() == 0
-    }
 }

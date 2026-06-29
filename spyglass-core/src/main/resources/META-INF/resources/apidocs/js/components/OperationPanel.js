@@ -8,6 +8,7 @@ import { statusKind } from '../format.js'
 import { useFlash } from '../useFlash.js'
 import ParamInputs from './ParamInputs.js'
 import ResponseView from './ResponseView.js'
+import RequestLogPanel from './RequestLogPanel.js'
 
 // Loaded only when the Raw JSON tab is first opened, so the CodeMirror bundle stays out of the
 // explorer's initial payload.
@@ -49,7 +50,7 @@ function isTextLike(ct) {
 // Drives a single operation: parameters, request body (form or raw JSON), execution and response.
 export default {
   name: 'OperationPanel',
-  components: { ParamInputs, ResponseView, JsonEditor },
+  components: { ParamInputs, ResponseView, JsonEditor, RequestLogPanel },
   props: {
     operation: { type: Object, required: true },
     // Per-operation execution state, owned by App and keyed by op.id ({ sending, response, inflight,
@@ -62,7 +63,11 @@ export default {
     accept: { type: String, default: '' },
     // Optional hook called once a send settles successfully ({ opId, req, response }); the seam a future
     // request-history store hangs off without touching send().
-    onExecuted: { type: Function, default: null }
+    onExecuted: { type: Function, default: null },
+    // Request Log UI config (resolved in App from the config seam): whether to show the per-operation
+    // Request Log panel below the response, and how many entries it shows before the "… +X more" fold.
+    requestLogEnabled: { type: Boolean, default: true },
+    requestLogFoldN: { type: Number, default: 5 }
   },
   setup(props) {
     const paramState = ref([])
@@ -214,11 +219,12 @@ export default {
     }
 
     // Rebuild the panel for the current operation. By default seeds the form from the saved snapshot
-    // (opForm); pass { fresh: true } (the Reset button) to start from schema defaults instead. Execution
-    // state (response/sending) is NOT touched here — it lives on the execState slice and must survive.
-    const rebuild = ({ fresh = false } = {}) => {
+    // (opForm); pass { fresh: true } (the Reset button) to start from schema defaults instead, or
+    // { snap } (Request Log replay) to seed from an explicit snapshot rather than the saved one.
+    // Execution state (response/sending) is NOT touched here — it lives on the execState slice and must survive.
+    const rebuild = ({ fresh = false, snap: explicitSnap } = {}) => {
       const op = props.operation
-      const snap = fresh ? null : loadForm(op.id)
+      const snap = fresh ? null : (explicitSnap !== undefined ? explicitSnap : loadForm(op.id))
       seeding = true
       paramState.value = op.parameters.map(p => {
         const c = controlFor(p.schema)
@@ -491,7 +497,15 @@ export default {
           headersList: headerEntries.map(([name, value]) => ({ name, value })),
           headersText: headerEntries.map(([k, v]) => k + ': ' + v).join('\n')
         }
-        if (props.onExecuted) props.onExecuted({ opId, req, response: es.response, snapshot })
+        if (props.onExecuted) {
+          // Fire-and-forget (it must stay off the render path); when the capture promise settles, bump
+          // the reload seq so the RequestLogPanel picks up the new entry — but only if this operation is
+          // still selected, so a capture that settles after the user switched away doesn't trigger a
+          // wasted reload of the now-current operation. recordExecution never rejects, so this can't
+          // surface as a request error here.
+          const captured = props.onExecuted({ opId, req, response: es.response, snapshot })
+          if (captured && typeof captured.then === 'function') captured.then(() => { if (props.operation.id === opId) logReloadSeq.value++ })
+        }
       } catch (e) {
         // Drop a superseded call's error/abort (e.g. the one a re-send just aborted) so it can't flash
         // "Request cancelled" over the newer in-flight; only the current call reports.
@@ -520,6 +534,20 @@ export default {
       es.response = null
       removeForm(props.operation.id)
       rebuild({ fresh: true })
+    }
+
+    // Bumped after each completed send (once the Request Log write settles), so the per-operation
+    // RequestLogPanel re-reads the store and shows the new entry.
+    const logReloadSeq = ref(0)
+
+    // Request Log "Replay": load a past entry's request snapshot back into THIS operation's form. The
+    // snapshot is the same shape buildSnapshot produces, so it rides the normal seed path (rebuild →
+    // seedBody → importValue): best-effort against the current schema — inputs for fields that no longer
+    // exist are dropped, and newly-required-but-empty fields surface through the existing non-blocking
+    // warnings. A record with no captured snapshot (null) is a no-op rather than wiping the form.
+    const replay = (snapshot) => {
+      if (snapshot == null) return
+      rebuild({ snap: snapshot })
     }
 
     onBeforeUnmount(cancel)
@@ -621,7 +649,7 @@ export default {
       tab, schemaView, requestRef, responseRefs, statusClass, editorSchema, mdBlock,
       requestExamples, reqCanPrefill, responseExamples, paramExampleGroups, hasAnyExamples, prefillRaw, prefillParam,
       setRaw, prettyRaw, send, reset, copyCurl, copyHttp, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys,
-      showCancel
+      showCancel, replay, logReloadSeq
     }
   },
   template: `
@@ -739,6 +767,9 @@ export default {
         </div>
 
         <ResponseView v-if="response" :resp="response" :name="downloadName" />
+
+        <RequestLogPanel v-if="requestLogEnabled" :op-id="operation.id" :fold-n="requestLogFoldN"
+          :reload-seq="logReloadSeq" @replay="replay" />
       </div>
 
       <div v-show="tab === 'schema'" class="schema-doc" role="tabpanel">

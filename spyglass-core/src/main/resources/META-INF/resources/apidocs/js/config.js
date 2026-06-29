@@ -90,6 +90,93 @@ export function resolveUpdateCheckConfig(spec) {
   }
 }
 
+// Request Log configuration (see requestLog.js / requestLogStore.js): on by default, with the storage
+// caps and body-truncation threshold exposed here so a host can disable the feature (kiosk / shared
+// machines — nothing is then written and the panel is hidden) or retune the bounds without editing the
+// jar. Resolved separately from CONFIG, like the update check, because its spec layer
+// (x-spyglass-config.requestLog) isn't known until the spec loads; App.js calls resolveRequestLogConfig
+// after loadSpec and hands the result to configureRequestLog (and on to the store + capture modules).
+//
+// This is the single source of truth for the defaults: requestLog.js and requestLogStore.js import this
+// object to seed their mutable fallbacks, so a default changed here can't drift from the module copies.
+// `foldN` is the only display-side value (how many entries show before the "… +X more" fold); the rest
+// bound storage.
+export const REQUEST_LOG_DEFAULTS = {
+  enabled: true,
+  foldN: 5,
+  perOpCap: 25,
+  globalCountCap: 500,
+  globalBytesCap: 5 * 1024 * 1024,
+  bodyCap: 32 * 1024
+}
+
+// Parses a flag param to an explicit on/off, or null when it says nothing. Deliberately STRICTER than
+// the update check (where anything that isn't a disable token enables): the Request Log is a privacy
+// switch, so a bare/empty/stray `?requestLog` must NOT flip a host-disabled (kiosk) log back on — only a
+// recognized token has an opinion, otherwise the lower-priority operator layer stands.
+function parseToggle(v) {
+  if (/^(on|true|1|yes)$/i.test(v)) return true
+  if (/^(off|false|0|no)$/i.test(v)) return false
+  return null
+}
+
+// The validity test for every Request Log count/byte bound: a positive integer. (Unlike the update
+// check's timings, which allow sub-second fractions, these are entry counts and byte sizes — a
+// fractional foldN would render a "… +0.5 more" label, a fractional cap is meaningless.)
+function posInt(n) {
+  return Number.isInteger(n) && n > 0
+}
+
+// Flat query-param overrides (params can't express nesting):
+//   ?requestLog=on|true|1|yes  -> enable; ?requestLog=off|false|0|no -> disable; anything else -> ignored
+//   ?requestLogFoldN=, ?requestLogPerOpCap=, ?requestLogBodyCap=, ?requestLogGlobalCount=,
+//   ?requestLogGlobalBytes=  -> the numeric bounds
+// A numeric param is taken only when it parses to a positive integer; unset, empty, zero, negative,
+// fractional, or non-numeric values are dropped so they fall back to a lower-priority layer.
+function requestLogFromParams() {
+  const out = {}
+  const flag = parseToggle(params.get('requestLog'))
+  if (flag != null) out.enabled = flag
+  const map = [
+    ['requestLogFoldN', 'foldN'], ['requestLogPerOpCap', 'perOpCap'], ['requestLogBodyCap', 'bodyCap'],
+    ['requestLogGlobalCount', 'globalCountCap'], ['requestLogGlobalBytes', 'globalBytesCap']
+  ]
+  for (const [param, key] of map) {
+    const raw = params.get(param)
+    if (raw == null) continue
+    const n = Number(raw)
+    if (posInt(n)) out[key] = n
+  }
+  return out
+}
+
+// Takes only the known Request Log keys from a config layer (defends against an operator/spec passing
+// stray or wrong-typed fields). Numeric bounds must be positive integers — a 0/negative/fractional cap
+// is dropped to the lower layer rather than producing a store that evicts everything or a fractional fold.
+function pickRequestLog(layer) {
+  if (!layer || typeof layer !== 'object') return {}
+  const out = {}
+  if ('enabled' in layer) out.enabled = !!layer.enabled
+  for (const key of ['foldN', 'perOpCap', 'bodyCap', 'globalCountCap', 'globalBytesCap']) {
+    if (posInt(layer[key])) out[key] = layer[key]
+  }
+  return out
+}
+
+// Folds the Request Log config layers, lowest priority first:
+//   defaults < spec info['x-spyglass-config'].requestLog < window.SPYGLASS_CONFIG.requestLog < query
+// Operator-supplied layers (global/query) win over the spec, mirroring the update-check precedence.
+export function resolveRequestLogConfig(spec) {
+  const specConfig = spec && spec.info && spec.info['x-spyglass-config']
+  const specLayer = specConfig && typeof specConfig === 'object' ? specConfig.requestLog : null
+  return {
+    ...REQUEST_LOG_DEFAULTS,
+    ...pickRequestLog(specLayer),
+    ...pickRequestLog(overrides.requestLog),
+    ...requestLogFromParams()
+  }
+}
+
 // Whether a URL is same-origin: a relative path, or an absolute URL whose origin matches the page.
 // Used to gate two author-supplied-and-thus-less-trusted inputs against operator-supplied ones: the
 // ?spec= query param (above) and the spec's x-spyglass-extensions list — an absolute cross-origin URL

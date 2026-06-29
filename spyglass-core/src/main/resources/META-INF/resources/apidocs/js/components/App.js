@@ -1,10 +1,10 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import { CONFIG, storageKey, isSameOriginExtension, resolveUpdateCheckConfig } from '../config.js'
+import { CONFIG, storageKey, isSameOriginExtension, resolveUpdateCheckConfig, resolveRequestLogConfig } from '../config.js'
 import { loadSpec, collectOperations, specRawText, specEtag } from '../spec.js'
 import { loadJson, saveJson, clearSaved, HEADERS_KEY, AUTH_TOKEN_KEY, SIDEBAR_WIDTH_KEY, ACCEPT_KEY } from '../storage.js'
 import { getValues, recordValue, removeValue, authKey } from '../history.js'
 import { registry, registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver, loadExtensions } from '../extensions.js'
-import { recordExecution, registerSanitizer } from '../requestLog.js'
+import { recordExecution, registerSanitizer, configureRequestLog } from '../requestLog.js'
 import { useUpdateCheck } from '../useUpdateCheck.js'
 import Sidebar from './Sidebar.js'
 import OperationPanel from './OperationPanel.js'
@@ -144,6 +144,12 @@ export default {
     // loaded (so the baseline hash is taken from the document this tab rendered).
     const updateCheck = useUpdateCheck()
 
+    // The UI-relevant Request Log config (enabled gate + display fold), resolved from the spec layer in
+    // onMounted and handed to the OperationPanel. The write-path config (caps, body cap) is applied to
+    // the capture modules separately via configureRequestLog. Defaults match the config defaults so the
+    // panel behaves correctly in the brief window before the spec loads (no operation renders then).
+    const requestLogUi = ref({ enabled: true, foldN: 5 })
+
     // The seam context handed to each extension's register(api). It exposes the loaded spec (for the
     // extension to read its own x-* info extensions), the header bridge (add rows, read/set the
     // Authorization value, observe Clear-all), persistence/history helpers (so extensions don't import
@@ -239,6 +245,12 @@ export default {
         const spec = await loadSpec(CONFIG.specUrl)
         if (spec.info && spec.info.title) { title.value = spec.info.title; document.title = spec.info.title }
         operations.value = collectOperations()
+        // Request Log config (config.js folds in the spec's x-spyglass-config.requestLog layer): apply
+        // the write-path settings (enable gate, caps, body cap) to the capture modules, and keep the
+        // UI-relevant slice for the panel. Resolved before applyHash, so it's set before any panel renders.
+        const requestLogConfig = resolveRequestLogConfig(spec)
+        configureRequestLog(requestLogConfig)
+        requestLogUi.value = { enabled: requestLogConfig.enabled, foldN: requestLogConfig.foldN }
         // Front-end extensions: the operator's query/global list (resolved in config.js) is trusted and
         // wins. Otherwise the spec may advertise modules via the x-spyglass-extensions info extension —
         // but a spec is less trusted, so those are limited to same-origin (a cross-origin URL there
@@ -298,7 +310,7 @@ export default {
       authorizationValue, setAuthorization, authResetSeq,
       accept, acceptOptions, onAcceptInput,
       addHeader, removeHeader, select, startDrag, onDividerKey, minSidebar: MIN_SIDEBAR, clearHeaders,
-      currentExec, recordExecution,
+      currentExec, recordExecution, requestLogUi,
       headerPresets: registry.headerPresets, authPanels: registry.authPanels, headerToAdd, addPreset,
       updateToastShow: updateCheck.show, onUpdateReload: updateCheck.reload, onUpdateDismiss: updateCheck.dismiss
     }
@@ -354,7 +366,8 @@ export default {
 
         <div v-if="loading" class="status-msg" role="status">Loading spec…</div>
         <div v-else-if="error" class="status-msg error" role="alert">Failed to load spec: {{ error }}</div>
-        <OperationPanel v-else-if="selected" :operation="selected" :exec-state="currentExec" :base-url="baseUrl" :headers="headers" :accept="accept" :on-executed="recordExecution" />
+        <OperationPanel v-else-if="selected" :operation="selected" :exec-state="currentExec" :base-url="baseUrl" :headers="headers" :accept="accept" :on-executed="recordExecution"
+          :request-log-enabled="requestLogUi.enabled" :request-log-fold-n="requestLogUi.foldN" />
         <div v-else class="status-msg" role="status">Select an operation from the left.</div>
       </main>
       <UpdateToast :show="updateToastShow" :title="title" @reload="onUpdateReload" @dismiss="onUpdateDismiss" />
