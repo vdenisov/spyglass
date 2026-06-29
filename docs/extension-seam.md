@@ -1,8 +1,8 @@
 # Front-end extension seam
 
 The core ships **no** consumer-specific UI. An embedding service (or any extension author) contributes
-its own — auth panels, header presets, header-link resolvers — as additional ESM modules loaded at
-runtime, without forking the core.
+its own — auth panels, header presets, header-link resolvers, footer items — as additional ESM modules
+loaded at runtime, without forking the core.
 
 ## The contract
 
@@ -54,6 +54,7 @@ resolver wins).
 | `api.ui.registerAuthPanel(component)` | Register a Vue component rendered in the headers editor. |
 | `api.ui.registerHeaderPresets(groups)` | Register `[{ group, items: [{ name, label, ph?, hint? }] }]` for the "+ Add preset header" dropdown. |
 | `api.ui.registerHeaderLinkResolver(fn)` | Register `(name, value) => url\|null` to turn a response header into a link. First non-null wins; unsafe schemes (`javascript:`/`data:`) are dropped. |
+| `api.ui.registerFooterItem(component)` | Register a Vue component rendered in the sidebar footer — an extension/build version, a support link. Shows alongside Spyglass's own footer mark, or (with the mark disabled via [branding config](configuration.md#branding)) in its place. The core renders each item on a **single line** (the footer's `.foot-item` class clips overflow with an ellipsis), so keep the content to one short line. |
 | `api.requestLog.registerSanitizer(fn)` | Register `(record) => record` to redact a Request Log record before it is persisted. Runs after the core `Authorization` mask, in registration order; a throw drops the record (fail-closed). |
 
 ## Redacting the Request Log
@@ -80,7 +81,7 @@ passed, so every surface is reachable: `request.url` (the query string), `reques
 
 ## Worked example: the demo's sample extension
 
-`spyglass-demo` ships a small, self-contained extension that exercises all four seam hooks and
+`spyglass-demo` ships a small, self-contained extension that exercises all five seam hooks and
 auto-loads from the spec (no `?ext=` needed). It is served same-origin from `META-INF/resources` at
 `/spyglass-ext/demo/index.js` and advertised by the demo's own additive `OpenApiCustomizer`:
 
@@ -131,6 +132,17 @@ export function register(api) {
             + ' background: var(--bg); color: var(--accent); cursor: pointer; font-size: 12px',
           onClick: () => api.headers.setAuthorization('demo-token') }, 'Apply demo token')
       ])
+    }
+  })
+
+  // A footer item — a Vue component rendered in the sidebar footer, alongside Spyglass's own mark (or,
+  // with the mark disabled via the branding config, in its place). Here it surfaces the extension's own
+  // version; an org might show an internal build id or a support link instead.
+  api.ui.registerFooterItem({
+    name: 'DemoFooterItem',
+    setup() {
+      return () => h('span', { class: 'demo-foot-marker', style: 'color: var(--muted); font-size: 11px' },
+        'Demo Extension v1.0.0')
     }
   })
 

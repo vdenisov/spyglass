@@ -1,9 +1,9 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import { CONFIG, storageKey, isSameOriginExtension, resolveUpdateCheckConfig, resolveRequestLogConfig } from '../config.js'
+import { CONFIG, storageKey, isSameOriginExtension, resolveUpdateCheckConfig, resolveRequestLogConfig, resolveBrandingConfig } from '../config.js'
 import { loadSpec, collectOperations, specRawText, specEtag } from '../spec.js'
 import { loadJson, saveJson, clearSaved, HEADERS_KEY, AUTH_TOKEN_KEY, SIDEBAR_WIDTH_KEY, ACCEPT_KEY } from '../storage.js'
 import { getValues, recordValue, removeValue, authKey } from '../history.js'
-import { registry, registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver, loadExtensions } from '../extensions.js'
+import { registry, registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver, registerFooterItem, loadExtensions } from '../extensions.js'
 import { recordExecution, registerSanitizer, configureRequestLog } from '../requestLog.js'
 import { useUpdateCheck } from '../useUpdateCheck.js'
 import Sidebar from './Sidebar.js'
@@ -150,6 +150,12 @@ export default {
     // panel behaves correctly in the brief window before the spec loads (no operation renders then).
     const requestLogUi = ref({ enabled: true, foldN: 5 })
 
+    // Whether the sidebar footer shows Spyglass's own mark; resolved from the branding config (spec
+    // layer folded in) in onMounted. Defaults to true so the mark shows in the brief window before
+    // the spec loads, matching the config default. A white-label host turns it off via the standard
+    // config chain (see resolveBrandingConfig); extension-contributed footer items show regardless.
+    const brandingShow = ref(true)
+
     // The seam context handed to each extension's register(api). It exposes the loaded spec (for the
     // extension to read its own x-* info extensions), the header bridge (add rows, read/set the
     // Authorization value, observe Clear-all), persistence/history helpers (so extensions don't import
@@ -165,7 +171,7 @@ export default {
       },
       storage: { key: storageKey, load: loadJson, save: saveJson },
       history: { values: getValues, record: recordValue, remove: removeValue, key: authKey },
-      ui: { registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver },
+      ui: { registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver, registerFooterItem },
       // An embedding service redacts org-specific surfaces of a Request Log record (request/response
       // headers and bodies, the query in the URL and the replay snapshot) before it is persisted. The
       // sanitizer runs after the core Authorization default and in registration order; throwing drops
@@ -251,6 +257,9 @@ export default {
         const requestLogConfig = resolveRequestLogConfig(spec)
         configureRequestLog(requestLogConfig)
         requestLogUi.value = { enabled: requestLogConfig.enabled, foldN: requestLogConfig.foldN }
+        // Branding (config.js folds in the spec's x-spyglass-config.branding layer): whether the
+        // built-in Spyglass footer mark renders. Resolved before applyHash, like the request log.
+        brandingShow.value = resolveBrandingConfig(spec).show
         // Front-end extensions: the operator's query/global list (resolved in config.js) is trusted and
         // wins. Otherwise the spec may advertise modules via the x-spyglass-extensions info extension —
         // but a spec is less trusted, so those are limited to same-origin (a cross-origin URL there
@@ -310,14 +319,14 @@ export default {
       authorizationValue, setAuthorization, authResetSeq,
       accept, acceptOptions, onAcceptInput,
       addHeader, removeHeader, select, startDrag, onDividerKey, minSidebar: MIN_SIDEBAR, clearHeaders,
-      currentExec, recordExecution, requestLogUi,
+      currentExec, recordExecution, requestLogUi, brandingShow,
       headerPresets: registry.headerPresets, authPanels: registry.authPanels, headerToAdd, addPreset,
       updateToastShow: updateCheck.show, onUpdateReload: updateCheck.reload, onUpdateDismiss: updateCheck.dismiss
     }
   },
   template: `
     <div class="layout">
-      <Sidebar :operations="operations" :selected-id="selected ? selected.id : ''" :title="title" :loading="loading" @select="select"
+      <Sidebar :operations="operations" :selected-id="selected ? selected.id : ''" :title="title" :loading="loading" :branding-show="brandingShow" @select="select"
         :style="{ flex: '0 0 ' + sidebarWidth + 'px', width: sidebarWidth + 'px' }" />
       <div class="divider" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"
         :aria-valuenow="Math.round(sidebarWidth)" :aria-valuemin="minSidebar" tabindex="0"

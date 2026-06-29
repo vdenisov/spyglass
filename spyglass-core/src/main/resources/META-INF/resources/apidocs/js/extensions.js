@@ -22,7 +22,11 @@ export const registry = reactive({
   // Resolvers (name, value) => url|null that turn a response header into a deep link. First non-null
   // wins. An embedding extension registers these to point a header value at any destination — a
   // trace in a log explorer, a bounded-context page, an admin tool — without the core knowing about it.
-  headerLinkResolvers: []
+  headerLinkResolvers: [],
+  // Vue component definitions rendered in the sidebar footer, alongside (or, with the built-in mark
+  // disabled via the branding config, in place of) Spyglass's own footer mark. An embedding service
+  // adds its own footer content here — an extension/build version, an internal support link.
+  footerItems: []
 })
 
 export function registerAuthPanel(component) {
@@ -35,6 +39,10 @@ export function registerHeaderPresets(groups) {
 
 export function registerHeaderLinkResolver(fn) {
   if (typeof fn === 'function') registry.headerLinkResolvers.push(fn)
+}
+
+export function registerFooterItem(component) {
+  if (component) registry.footerItems.push(component)
 }
 
 // Returns the first safe non-null URL a registered resolver produces for this response header, or null

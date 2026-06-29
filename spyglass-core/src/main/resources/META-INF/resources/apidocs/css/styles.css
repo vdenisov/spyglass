@@ -179,6 +179,9 @@ body {
 .foot-version { font-family: var(--mono); }
 .foot-link { color: var(--accent); text-decoration: none; }
 .foot-link:hover { text-decoration: underline; }
+/* Extension-contributed footer items (registerFooterItem): inherit the footer's muted style; links
+   within them pick up the .foot-link treatment by adding that class. */
+.foot-item { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Both the unfiltered (tag) and filtered (matched-field) groupings share the same box: sized to
    their widest row so a long path can scroll horizontally without clipping the selection bar. */
 .tag-group, .match-group { margin-top: 12px; min-width: 100%; width: max-content; }

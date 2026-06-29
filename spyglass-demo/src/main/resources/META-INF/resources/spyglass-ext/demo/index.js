@@ -2,9 +2,13 @@
 // docs build on (docs/extension-seam.md). It is shipped as a static asset under META-INF/resources,
 // served same-origin at /spyglass-ext/demo/index.js, and advertised to the explorer by the demo's own
 // OpenApiCustomizer via the spec's x-spyglass-extensions info extension (so it auto-loads with no
-// ?ext= needed). It carries no consumer-specific coupling and exercises all four seam hooks; mirrors
+// ?ext= needed). It carries no consumer-specific coupling and exercises all five seam hooks; mirrors
 // the test-only probe (spyglass-spring-webmvc test resources) but ships for real.
 import { h } from 'vue'
+
+// The extension's own version, shown in the footer item below. A real extension would inject this at
+// build time (the way the core does via version.js); the demo hardcodes it to keep the asset static.
+const EXT_VERSION = '1.0.0'
 
 export function register(api) {
   // 1) Header presets — contribute a named group to the "+ Add preset header" dropdown. Generic
@@ -51,7 +55,21 @@ export function register(api) {
     }
   })
 
-  // 4) Request Log sanitizer — redact org-specific secrets from a record BEFORE it is persisted, on
+  // 4) Footer item — contribute content to the sidebar footer, alongside Spyglass's own mark (or, with
+  //    the mark disabled via the branding config, in its place). Here it surfaces the extension's own
+  //    version; an org might instead show an internal build id or a support link. Styled off the
+  //    explorer's CSS theme variables so it sits with the footer's muted text in light and dark mode.
+  api.ui.registerFooterItem({
+    name: 'DemoFooterItem',
+    setup() {
+      return () => h('span', {
+        class: 'demo-foot-marker',
+        style: 'color: var(--muted); font-size: 11px'
+      }, 'Demo Extension v' + EXT_VERSION)
+    }
+  })
+
+  // 5) Request Log sanitizer — redact org-specific secrets from a record BEFORE it is persisted, on
   //    every surface the value can land on. POST /apidocs-demo/secrets deliberately carries a secret in
   //    each: an `apiKey` query param, an X-Demo-Api-Key request header, a `secret` request-body field, an
   //    X-Demo-Session response header and a `sessionToken` response-body field. A query/body secret is

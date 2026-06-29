@@ -119,6 +119,34 @@ via `x-spyglass-config.requestLog` (see below). Precedence, lowest to highest:
 </script>
 ```
 
+### Branding
+
+The sidebar footer carries Spyglass's own mark — `Spyglass · OpenAPI Explorer`, the build version, and
+a GitHub link. Spyglass is MIT-licensed and meant to be embedded, so a white-label deployment turns that
+mark off through the standard config chain rather than forking the assets (the rest of the UI — the
+header and document title — already shows the spec's `info.title`, not "Spyglass").
+
+| Setting | Query param | `SPYGLASS_CONFIG` key | Default | Notes |
+| --- | --- | --- | --- | --- |
+| Show built-in mark | `?branding=off` | `branding.show` | `true` | When off, the brand line, version, and GitHub link are all hidden. |
+
+The flag governs only the **built-in** mark. To *add* your own footer content — an extension/build
+version, an internal support link — register a footer item through the
+[extension seam](extension-seam.md) (`api.ui.registerFooterItem`); extension footer items render
+regardless of this flag. Turning the mark off **and** registering a footer item yields a fully
+white-labeled footer (the bar hides entirely when neither is present). Like the other settings, branding
+also accepts a **spec-supplied** layer via `x-spyglass-config.branding`. Precedence, lowest to highest:
+
+**built-in default → spec `x-spyglass-config.branding` → `window.SPYGLASS_CONFIG.branding` → URL query parameter.**
+
+```html
+<script>
+  window.SPYGLASS_CONFIG = {
+    branding: { show: false }   // white-label: hide the built-in Spyglass footer mark
+  }
+</script>
+```
+
 ## OpenAPI `info` extension catalog (`x-*`)
 
 The **mechanism** — emit/consume `x-*` keys on the document's `info` object — is part of the core. The
@@ -128,7 +156,7 @@ core consumes and emits two generic keys; other keys are populated by whatever e
 | --- | --- | --- | --- |
 | `x-service-name` | emitted | the core (`SpyglassOpenApiCustomizer`, from `spring.application.name`) | Informational service name. |
 | `x-spyglass-extensions` | **consumed** by core | whichever customizer supplies extensions (e.g. the demo's `DemoEndpointsConfiguration`, or an extension pack) | A list of ESM extension-module URLs to load. Spec-supplied entries are **same-origin only** (operator-supplied lists via `?ext=`/`SPYGLASS_CONFIG` are trusted anywhere). |
-| `x-spyglass-config` | **consumed** by core | whichever customizer supplies it (e.g. the demo sets the update-check interval) | A nested config object the front end folds **under** the operator layers (`SPYGLASS_CONFIG`/query win). Carries `updateCheck` — see [Update check](#update-check) — and `requestLog` — see [Request Log](#request-log). |
+| `x-spyglass-config` | **consumed** by core | whichever customizer supplies it (e.g. the demo sets the update-check interval) | A nested config object the front end folds **under** the operator layers (`SPYGLASS_CONFIG`/query win). Carries `updateCheck` — see [Update check](#update-check) — `requestLog` — see [Request Log](#request-log) — and `branding` — see [Branding](#branding). |
 
 An extension can populate further keys against the same mechanism — e.g. a mint-endpoint path or a
 deep-link config — read by its own front-end extension modules, not by the core.
