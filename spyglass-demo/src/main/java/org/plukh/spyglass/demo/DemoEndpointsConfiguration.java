@@ -31,6 +31,9 @@ public class DemoEndpointsConfiguration {
     /** The demo's update-check poll interval (seconds): hourly, vs the library's conservative 300s default. */
     private static final int DEMO_UPDATE_CHECK_INTERVAL_SECONDS = 3600;
 
+    /** The operation whose response body the demo's body transformer decodes (see {@code GET /mirror}). */
+    private static final String MIRROR_PATH = "/apidocs-demo/mirror";
+
     @Bean
     public DemoController demoController() {
         return new DemoController();
@@ -86,6 +89,37 @@ public class DemoEndpointsConfiguration {
             if (info.getExtensions() == null || !info.getExtensions().containsKey("x-spyglass-config")) {
                 info.addExtension("x-spyglass-config",
                         Map.of("updateCheck", Map.of("intervalSeconds", DEMO_UPDATE_CHECK_INTERVAL_SECONDS)));
+            }
+        };
+    }
+
+    /**
+     * Wires the demo's response-body-transformer showcase through the spec's {@code x-*} vendor
+     * extensions — the same mechanism a real host integration uses. It puts an enum map on {@code info}
+     * ({@code x-demo-enums}) and an operation-level marker on {@code GET /mirror}
+     * ({@code x-demo-decode = { field, enum }}); the front-end transformer (see the demo module) reads
+     * both off its {@code ctx} to decode the response. This is the demo's only per-operation extension,
+     * so it also exercises the core's vendor-extension passthrough on operations.
+     *
+     * <p>Additive and idempotent like the other demo customizers: a check-then-act guard leaves any
+     * value a prior customizer set in place.
+     */
+    @Bean
+    public OpenApiCustomizer demoBodyTransformerCustomizer() {
+        return openApi -> {
+            if (openApi.getInfo() == null) {
+                openApi.setInfo(new Info());
+            }
+            var info = openApi.getInfo();
+            if (info.getExtensions() == null || !info.getExtensions().containsKey("x-demo-enums")) {
+                info.addExtension("x-demo-enums",
+                        Map.of("MirrorStatus", Map.of("1", "ACTIVE", "2", "PENDING", "3", "CLOSED")));
+            }
+            var paths = openApi.getPaths();
+            var mirror = paths == null ? null : paths.get(MIRROR_PATH);
+            var get = mirror == null ? null : mirror.getGet();
+            if (get != null && (get.getExtensions() == null || !get.getExtensions().containsKey("x-demo-decode"))) {
+                get.addExtension("x-demo-decode", Map.of("field", "status", "enum", "MirrorStatus"));
             }
         };
     }

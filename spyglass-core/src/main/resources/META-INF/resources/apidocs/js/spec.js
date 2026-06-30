@@ -646,6 +646,10 @@ export function collectOperations() {
       const op = item[method]
       if (!op) continue
       ops.push({
+        // x-* vendor extensions pass through untouched so extension seams (e.g. the response-body
+        // transformer) can read an operation's own config off the operation object. Spread first so
+        // the curated fields below win on the off chance an x- key ever collided.
+        ...vendorExtensions(op),
         id: `${method.toUpperCase()} ${path}`,
         method: method.toUpperCase(),
         path,
@@ -662,6 +666,15 @@ export function collectOperations() {
     }
   }
   return ops
+}
+
+// The x-* vendor extensions of a spec node, as a plain object (empty when there are none). The core
+// never interprets these — they're carried through verbatim so an extension can read its own config
+// (see collectOperations and the response-body-transformer seam).
+function vendorExtensions(node) {
+  const out = {}
+  if (node) for (const key of Object.keys(node)) if (key.startsWith('x-')) out[key] = node[key]
+  return out
 }
 
 // Spec-supplied link targets (operation externalDocs.url, example externalValue) flow into <a href>;

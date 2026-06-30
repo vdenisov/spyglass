@@ -766,7 +766,7 @@ export default {
           </div>
         </div>
 
-        <ResponseView v-if="response" :resp="response" :name="downloadName" />
+        <ResponseView v-if="response" :resp="response" :name="downloadName" :operation="operation" />
 
         <RequestLogPanel v-if="requestLogEnabled" :op-id="operation.id" :fold-n="requestLogFoldN"
           :reload-seq="logReloadSeq" @replay="replay" />

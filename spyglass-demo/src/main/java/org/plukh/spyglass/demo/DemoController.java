@@ -218,6 +218,24 @@ public class DemoController {
     }
 
     @Operation(
+            summary = "Mirror a status code (response-body transformer probe)",
+            description = "Demo — echoes an integer status code straight back. The demo extension registers a "
+                    + "response-body transformer that decodes this code into a label (1=ACTIVE, 2=PENDING, "
+                    + "3=CLOSED; anything else → UNKNOWN) behind the response panel's **Decoded** toggle, while "
+                    + "leaving the sibling fields untouched. Toggle **Decoded** off to see the raw code again.")
+    @ApiResponse(responseCode = "200", description = "The echoed status code plus untouched sibling fields.")
+    @GetMapping("/mirror")
+    public MirrorResponse mirror(
+            @Parameter(description = "A status code to echo (try 1, 2, 3, or any other integer).")
+            @RequestParam(value = "status", defaultValue = "1") int status) {
+        return MirrorResponse.builder()
+                .status(status)
+                .count(status * 10)
+                .note("unchanged")
+                .build();
+    }
+
+    @Operation(
             summary = "Return a large JSON response (pretty-print size-limit probe)",
             description = "Demo — returns a JSON body of roughly `kb` kilobytes (default 2200, just over the "
                     + "explorer's ~2 MB threshold), so the response view falls back to plain, unformatted text "
@@ -855,6 +873,25 @@ public class DemoController {
 
         @Schema(description = "A human-readable confirmation.")
         String message;
+    }
+
+    /**
+     * Demo — the echoed response of {@code GET /mirror}, decoded by the demo extension's response-body
+     * transformer (the {@code status} code becomes a label; {@code count} and {@code note} are untouched).
+     */
+    @Value
+    @Builder
+    public static class MirrorResponse {
+
+        @Schema(description = "A status code the demo extension decodes to a label "
+                + "(1=ACTIVE, 2=PENDING, 3=CLOSED; anything else → UNKNOWN).")
+        Integer status;
+
+        @Schema(description = "An untouched integer (not decoded) — shows sibling values are unaffected.")
+        Integer count;
+
+        @Schema(description = "An untouched string field.")
+        String note;
     }
 
     /**

@@ -3,7 +3,7 @@ import { CONFIG, storageKey, isSameOriginExtension, resolveUpdateCheckConfig, re
 import { loadSpec, collectOperations, specRawText, specEtag } from '../spec.js'
 import { loadJson, saveJson, clearSaved, HEADERS_KEY, AUTH_TOKEN_KEY, SIDEBAR_WIDTH_KEY, ACCEPT_KEY } from '../storage.js'
 import { getValues, recordValue, removeValue, authKey } from '../history.js'
-import { registry, registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver, registerFooterItem, loadExtensions } from '../extensions.js'
+import { registry, registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver, registerFooterItem, registerBodyTransformer, loadExtensions } from '../extensions.js'
 import { recordExecution, registerSanitizer, configureRequestLog } from '../requestLog.js'
 import { useUpdateCheck } from '../useUpdateCheck.js'
 import Sidebar from './Sidebar.js'
@@ -172,6 +172,11 @@ export default {
       storage: { key: storageKey, load: loadJson, save: saveJson },
       history: { values: getValues, record: recordValue, remove: removeValue, key: authKey },
       ui: { registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver, registerFooterItem },
+      // An embedding service decodes a machine-oriented JSON response into a more readable view
+      // behind the response panel's Decoded toggle. A transformer reads its own x-* extensions off
+      // ctx.operation / api.spec (exposed above); JSON-only, transform-on-display, raw stays one
+      // click away. See extensions.js for the chaining/failure-isolation contract.
+      response: { registerBodyTransformer },
       // An embedding service redacts org-specific surfaces of a Request Log record (request/response
       // headers and bodies, the query in the URL and the replay snapshot) before it is persisted. The
       // sanitizer runs after the core Authorization default and in registration order; throwing drops

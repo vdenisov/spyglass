@@ -1,8 +1,8 @@
 # Front-end extension seam
 
 The core ships **no** consumer-specific UI. An embedding service (or any extension author) contributes
-its own — auth panels, header presets, header-link resolvers, footer items — as additional ESM modules
-loaded at runtime, without forking the core.
+its own — auth panels, header presets, header-link resolvers, footer items, response-body transformers
+— as additional ESM modules loaded at runtime, without forking the core.
 
 ## The contract
 
@@ -72,6 +72,7 @@ reactive adapter.
 | `api.ui.registerHeaderLinkResolver(fn)` | Register `(name, value) => url\|null` to turn a response header into a link. First non-null wins; unsafe schemes (`javascript:`/`data:`) are dropped. |
 | `api.ui.registerFooterItem(component)` | Register a Vue component rendered in the sidebar footer — an extension/build version, a support link. Shows alongside Spyglass's own footer mark, or (with the mark disabled via [branding config](configuration.md#branding)) in its place. The core renders each item on a **single line** (the footer's `.foot-item` class clips overflow with an ellipsis), so keep the content to one short line. |
 | `api.requestLog.registerSanitizer(fn)` | Register `(record) => record` to redact a Request Log record before it is persisted. Runs after the core `Authorization` mask, in registration order; a throw drops the record (fail-closed). |
+| `api.response.registerBodyTransformer(fn)` | Register `(value, ctx) => value\|null` to produce a more readable view of a JSON response body behind the response panel's **Decoded** toggle. JSON-only, transform-on-display; transformers chain (each non-null result folds into the next); returning `null` declines (no toggle). Throws are caught/logged/skipped; the raw body is untouched and stays one click away. |
 
 ## Redacting the Request Log
 
@@ -95,9 +96,36 @@ passed, so every surface is reachable: `request.url` (the query string), `reques
   `response.finalUrl` (which mirrors the request URL's query even without a redirect). Redact a value
   on every surface it appears on, not just the obvious one.
 
+## Transforming the response body
+
+Some backends serialize JSON in a machine-oriented form that is hard to read — enum values as numeric
+codes, booleans as `0`/`1`. The raw bytes carry no hint of the intended meaning, so the core can't
+improve the rendering on its own. An extension that *does* know the mapping registers a **body
+transformer** through `api.response.registerBodyTransformer(fn)`, and the response panel grows a
+**Decoded** toggle (next to Pretty-print) offering the readable view.
+
+A transformer is `(value, ctx) => value | null`:
+
+- `value` is the **parsed** JSON value (object/array) — not the raw text — so it can be walked and
+  cloned. Return a new value; returning `null`/`undefined` means "not applicable".
+- `ctx` carries the context needed to decide and decode:
+  - `ctx.operation` — the operation object, **including its `x-*` vendor extensions**, so a
+    transformer can gate on its own marker (e.g. `ctx.operation['x-...']`).
+  - `ctx.spec` — the full loaded OpenAPI document, so it can read shared config off `ctx.spec.info`.
+  - `ctx.responseSchema` — the declared response schema, or `null` (currently always `null`).
+  - `ctx.contentType`, `ctx.status` — from the HTTP response.
+
+- **JSON only, transform-on-display.** Transformers run only for JSON responses, and only to produce
+  what's shown — the stored/raw body is never mutated and stays one click away via the toggle.
+- **Chaining.** Multiple transformers fold left-to-right: each non-null result replaces the running
+  value and feeds the next. The Decoded toggle appears once any transformer has applied.
+- **Failure isolation.** A throwing transformer is caught, logged and skipped — unlike the Request
+  Log sanitizer (fail-closed), a faulty transformer simply yields no decode and never breaks
+  rendering.
+
 ## Worked example: the demo's sample extension
 
-`spyglass-demo` ships a small, self-contained extension that exercises all five seam hooks and
+`spyglass-demo` ships a small, self-contained extension that exercises all six seam hooks and
 auto-loads from the spec (no `?ext=` needed). It is served same-origin from `META-INF/resources` at
 `/spyglass-ext/demo/index.js` and advertised by the demo's own additive `OpenApiCustomizer`:
 
@@ -178,6 +206,17 @@ export function register(api) {
     res.body = redactJsonField(res.body, 'sessionToken')
     return record
   })
+
+  // A response-body transformer — decode a machine-oriented payload into a readable view behind the
+  // Decoded toggle. It declines (returns null) unless the operation carries an `x-demo-decode` marker
+  // (added by the demo's OpenApiCustomizer onto GET /apidocs-demo/mirror), then maps the named field's
+  // numeric code to a label from `x-demo-enums` on `info`, leaving sibling fields untouched.
+  api.response.registerBodyTransformer((value, ctx) => {
+    const decode = ctx.operation && ctx.operation['x-demo-decode']
+    if (!decode || value == null || typeof value !== 'object' || !(decode.field in value)) return null
+    const map = ((ctx.spec && ctx.spec.info && ctx.spec.info['x-demo-enums']) || {})[decode.enum] || {}
+    return { ...value, [decode.field]: map[String(value[decode.field])] || 'UNKNOWN' }
+  })
 }
 ```
 
@@ -185,4 +224,5 @@ The full demo module also redacts those same values in the replay snapshot (`rec
 which the excerpt above omits for brevity — see the source for the complete version.
 
 `vue` resolves through the explorer's import map, so the panel needs no build step. The end-to-end
-behaviour is covered by `SampleExtensionAE` and `RequestLogSanitizerAE` in `spyglass-demo`.
+behaviour is covered by `SampleExtensionAE`, `RequestLogSanitizerAE` and `BodyTransformerAE` in
+`spyglass-demo`.

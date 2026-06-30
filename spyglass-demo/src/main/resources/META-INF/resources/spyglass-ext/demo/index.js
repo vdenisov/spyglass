@@ -2,7 +2,7 @@
 // docs build on (docs/extension-seam.md). It is shipped as a static asset under META-INF/resources,
 // served same-origin at /spyglass-ext/demo/index.js, and advertised to the explorer by the demo's own
 // OpenApiCustomizer via the spec's x-spyglass-extensions info extension (so it auto-loads with no
-// ?ext= needed). It carries no consumer-specific coupling and exercises all five seam hooks; mirrors
+// ?ext= needed). It carries no consumer-specific coupling and exercises all six seam hooks; mirrors
 // the test-only probe (spyglass-spring-webmvc test resources) but ships for real.
 import { h } from 'vue'
 
@@ -115,6 +115,26 @@ export function register(api) {
       snap.rawText = redactJsonField(snap.rawText, 'secret')
     }
     return record
+  })
+
+  // 6) Response-body transformer — decode a machine-oriented JSON response into a readable view behind
+  //    the response panel's Decoded toggle. It declines (returns null) for every operation except the
+  //    one the demo's OpenApiCustomizer marked with an x-demo-decode extension (GET /apidocs-demo/mirror):
+  //    that marker names the field to decode and the enum to use, and the enum maps live on the spec's
+  //    info under x-demo-enums. So this reads BOTH its own ctx.operation['x-...'] and ctx.spec.info['x-...'],
+  //    the way a real host decoder would. The numeric `status` becomes its label (UNKNOWN for an
+  //    unmapped code); the sibling `count`/`note` fields are copied through untouched. The raw body is
+  //    never mutated — the transform only feeds the Decoded view, and toggling it off shows raw again.
+  //
+  //    THIS IS A DEMONSTRATION. A real transformer should be defensive about shapes it doesn't expect
+  //    (arrays, nested objects, missing fields) and return null rather than throw — though a throw is
+  //    caught and skipped by the core, it just means no decode.
+  api.response.registerBodyTransformer((value, ctx) => {
+    const decode = ctx.operation && ctx.operation['x-demo-decode']
+    if (!decode || value == null || typeof value !== 'object' || !(decode.field in value)) return null
+    const enums = (ctx.spec && ctx.spec.info && ctx.spec.info['x-demo-enums']) || {}
+    const map = enums[decode.enum] || {}
+    return { ...value, [decode.field]: map[String(value[decode.field])] || 'UNKNOWN' }
   })
 }
 
