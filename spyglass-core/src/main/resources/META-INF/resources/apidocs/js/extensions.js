@@ -26,7 +26,14 @@ export const registry = reactive({
   // Vue component definitions rendered in the sidebar footer, alongside (or, with the built-in mark
   // disabled via the branding config, in place of) Spyglass's own footer mark. An embedding service
   // adds its own footer content here — an extension/build version, an internal support link.
-  footerItems: []
+  footerItems: [],
+  // Transformers (value, ctx) => value|null that produce a more readable view of a parsed JSON
+  // response body, surfaced behind the response panel's Decoded toggle. They chain (each non-null
+  // result folds into the next); returning null means "not applicable". An embedding extension
+  // registers these to decode a machine-oriented payload (enum codes, 0/1 booleans) into something
+  // human-readable, reading its own x-* extensions off ctx.operation/ctx.spec — without the core
+  // knowing about any specific encoding.
+  bodyTransformers: []
 })
 
 export function registerAuthPanel(component) {
@@ -45,6 +52,10 @@ export function registerFooterItem(component) {
   if (component) registry.footerItems.push(component)
 }
 
+export function registerBodyTransformer(fn) {
+  if (typeof fn === 'function') registry.bodyTransformers.push(fn)
+}
+
 // Returns the first safe non-null URL a registered resolver produces for this response header, or null
 // when none applies (the value then renders as plain text). An unsafe-scheme URL (javascript:/data:) is
 // skipped like a null, and a throwing resolver is skipped too, so a faulty or hostile extension can
@@ -59,6 +70,26 @@ export function resolveHeaderLink(name, value) {
     }
   }
   return null
+}
+
+// Folds the parsed JSON body through every registered transformer in registration order: each
+// non-null result replaces the running value and is fed to the next transformer, so several can
+// cooperate on one payload. Returns { value, applied } — applied is true once any transformer
+// returned a result, which the response view uses to decide whether to offer the Decoded toggle.
+// A throwing transformer is caught, logged and skipped, so a faulty extension can never break the
+// response view; the raw body is untouched (the view re-derives raw on demand).
+export function runBodyTransformers(value, ctx) {
+  let current = value
+  let applied = false
+  for (const transform of registry.bodyTransformers) {
+    try {
+      const out = transform(current, ctx)
+      if (out != null) { current = out; applied = true }
+    } catch (e) {
+      console.error('[spyglass] body transformer failed:', e)
+    }
+  }
+  return { value: current, applied }
 }
 
 // Dynamically imports the resolved extension modules and calls each one's register(api). The list is

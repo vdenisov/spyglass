@@ -1,6 +1,9 @@
 package org.plukh.spyglass.demo
 
 import io.swagger.v3.oas.models.OpenAPI
+import io.swagger.v3.oas.models.Operation
+import io.swagger.v3.oas.models.PathItem
+import io.swagger.v3.oas.models.Paths
 import io.swagger.v3.oas.models.info.Info
 import spock.lang.Specification
 
@@ -66,5 +69,38 @@ class DemoExtensionCustomizerSpec extends Specification {
 
         then:
         openApi.info.extensions['x-spyglass-config'] == [updateCheck: [intervalSeconds: 60]]
+    }
+
+    def bodyTransformerCustomizer = new DemoEndpointsConfiguration().demoBodyTransformerCustomizer()
+
+    /** An OpenAPI document carrying the GET /apidocs-demo/mirror operation the customizer marks. */
+    private static OpenAPI withMirrorOperation() {
+        def get = new Operation()
+        new OpenAPI().info(new Info())
+                .paths(new Paths().addPathItem('/apidocs-demo/mirror', new PathItem().get(get)))
+    }
+
+    def "marks the mirror operation with x-demo-decode and puts the enum map on info"() {
+        given:
+        def openApi = withMirrorOperation()
+
+        when:
+        bodyTransformerCustomizer.customise(openApi)
+
+        then:
+        openApi.paths['/apidocs-demo/mirror'].get.extensions['x-demo-decode'] == ['field': 'status', 'enum': 'MirrorStatus']
+        openApi.info.extensions['x-demo-enums'] == ['MirrorStatus': ['1': 'ACTIVE', '2': 'PENDING', '3': 'CLOSED']]
+    }
+
+    def "never overwrites an x-demo-decode an earlier customizer already set"() {
+        given:
+        def openApi = withMirrorOperation()
+        openApi.paths['/apidocs-demo/mirror'].get.addExtension('x-demo-decode', ['field': 'other', 'enum': 'Other'])
+
+        when:
+        bodyTransformerCustomizer.customise(openApi)
+
+        then:
+        openApi.paths['/apidocs-demo/mirror'].get.extensions['x-demo-decode'] == ['field': 'other', 'enum': 'Other']
     }
 }

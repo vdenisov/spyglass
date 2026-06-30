@@ -12,7 +12,9 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
  * Boots the demo and POSTs to its JSON-body endpoints, proving the request bodies actually bind.
  *
  * <p>The Playwright {@code *AE} specs intercept the outgoing request with {@code page.route}, so they
- * never exercise server-side deserialization — this spec closes that gap. The immutable Lombok
+ * never exercise the real server response (deserialization for the POST bodies, and the echo for
+ * {@code GET /mirror} that the body-transformer showcase decodes) — this spec closes that gap. The
+ * immutable Lombok
  * {@code @Value} body types carry no default constructor; Jackson binds them through their public
  * canonical/all-args constructor (the demo compiles with {@code -parameters}). The discriminated
  * {@code /shapes} and {@code /conveyances} variants bind via their {@code @JsonTypeInfo} discriminator,
@@ -109,7 +111,27 @@ class DemoBodyBindingSpec extends Specification {
         echoed.note == 'keep-me'
     }
 
+    def "GET /apidocs-demo/mirror echoes the status code and its untouched siblings"() {
+        when:
+        def res = get('/apidocs-demo/mirror?status=2')
+
+        then:
+        res.code == 200
+        def echoed = json.parseText(res.text)
+        echoed.status == 2        // raw code — the front-end transformer decodes this to a label
+        echoed.count == 20
+        echoed.note == 'unchanged'
+    }
+
     // ---- helpers -------------------------------------------------------------
+
+    private Map get(String path) {
+        def conn = (HttpURLConnection) new URL("http://localhost:${port}${path}").openConnection()
+        conn.requestMethod = 'GET'
+        int code = conn.responseCode
+        String text = (code < 400 ? conn.inputStream : conn.errorStream)?.getText('UTF-8')
+        [code: code, text: text]
+    }
 
     private Map post(String path, String bodyJson) {
         def conn = (HttpURLConnection) new URL("http://localhost:${port}${path}").openConnection()

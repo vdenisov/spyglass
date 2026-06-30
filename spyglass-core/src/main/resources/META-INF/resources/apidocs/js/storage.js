@@ -13,14 +13,16 @@ export const AUTH_TOKEN_KEY = storageKey('auth-token')        // session: the Au
 export const SIDEBAR_WIDTH_KEY = storageKey('sidebar-width')  // local: dragged sidebar width
 export const FIELD_HISTORY_KEY = storageKey('field-history')  // local: recent-value history per field (see history.js)
 export const RESPONSE_PRETTY_KEY = storageKey('response-pretty') // local: pretty-print response preference
+export const RESPONSE_DECODED_KEY = storageKey('response-decoded') // local: decoded-view response preference
 export const ACCEPT_KEY = storageKey('accept')               // local: the Accept request header (response negotiation)
 export const OP_FORM_KEY = storageKey('op-form')             // local: per-operation request-form snapshot (see opForm.js)
 
 // Keys cleared by the "Clear headers" button — the *shared* request inputs only. Per-operation form
 // snapshots (op-form, cleared per operation via that operation's Reset), field history (managed
 // per-value via each combobox's ✕), the sidebar width (layout) and UI preferences (theme,
-// response-pretty) are deliberately kept, as they aren't shared request inputs and have their own
-// controls. Extension-owned state (e.g. an auth-generator form) resets via the reset signal, not here.
+// response-pretty, response-decoded) are deliberately kept, as they aren't shared request inputs and
+// have their own controls. Extension-owned state (e.g. an auth-generator form) resets via the reset
+// signal, not here.
 const CLEARABLE = [HEADERS_KEY, ACCEPT_KEY]
 
 export function loadJson(store, key, fallback) {

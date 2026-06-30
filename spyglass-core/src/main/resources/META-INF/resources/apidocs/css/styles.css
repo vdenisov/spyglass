@@ -741,7 +741,12 @@ h3 { margin: 18px 0 8px; font-size: 13px; }
 .resp-headers-row .rh-link { color: var(--accent); text-decoration: underline; }
 .resp-status .resp-ct { color: var(--muted); margin-left: auto; }
 .resp-toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 12px; border-top: 1px solid var(--border); }
-.resp-pretty { display: flex; gap: 5px; align-items: center; font-size: 12px; color: var(--muted); margin-right: auto; }
+.resp-pretty, .resp-decoded { display: flex; gap: 5px; align-items: center; font-size: 12px; color: var(--muted); }
+/* The last toggle in the left group carries the auto spacer that pushes the hint/buttons to the
+   right edge. When the Decoded toggle is shown it sits right after Pretty-print and takes over. */
+.resp-pretty { margin-right: auto; }
+.resp-pretty:has(+ .resp-decoded) { margin-right: 0; }
+.resp-decoded { margin-right: auto; }
 .resp-image { padding: 8px 12px 12px; }
 /* Fixed thumbnail box so an extreme aspect ratio (e.g. 10000x200) can't blow out the layout. */
 .resp-thumb {

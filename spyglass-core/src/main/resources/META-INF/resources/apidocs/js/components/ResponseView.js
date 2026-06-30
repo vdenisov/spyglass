@@ -1,7 +1,8 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { copyText } from '../clipboard.js'
-import { resolveHeaderLink } from '../extensions.js'
-import { loadJson, saveJson, RESPONSE_PRETTY_KEY } from '../storage.js'
+import { resolveHeaderLink, runBodyTransformers } from '../extensions.js'
+import { specRoot } from '../spec.js'
+import { loadJson, saveJson, RESPONSE_PRETTY_KEY, RESPONSE_DECODED_KEY } from '../storage.js'
 import { formatBytes, statusKind, filenameFromDisposition } from '../format.js'
 import { useFlash } from '../useFlash.js'
 import CodeViewer from './CodeViewer.js'
@@ -42,12 +43,19 @@ export default {
   props: {
     resp: { type: Object, required: true },
     // Base filename for the Download button when the response carries no Content-Disposition.
-    name: { type: String, default: 'response' }
+    name: { type: String, default: 'response' },
+    // The operation this response belongs to, passed to body transformers as ctx.operation (carries
+    // the operation's x-* vendor extensions). Null when no operation context is available.
+    operation: { type: Object, default: null }
   },
   setup(props) {
     // Pretty-print preference persists like a UI setting (not cleared by "Clear").
     const pretty = ref(loadJson(localStorage, RESPONSE_PRETTY_KEY, true) !== false)
     watch(pretty, (v) => saveJson(localStorage, RESPONSE_PRETTY_KEY, v))
+    // Decoded-view preference, same persistence convention. Defaults on so that when a host
+    // extension can decode the body it shows the readable form first; raw stays one click away.
+    const decoded = ref(loadJson(localStorage, RESPONSE_DECODED_KEY, true) !== false)
+    watch(decoded, (v) => saveJson(localStorage, RESPONSE_DECODED_KEY, v))
     const { flag: copied, flash: flashCopied } = useFlash()
 
     // { ok, value } — ok is false on empty or unparseable bodies (distinguishes a real JSON `null`).
@@ -71,7 +79,26 @@ export default {
     })
     const isText = computed(() => kind.value === 'json' || kind.value === 'text')
 
+    // Runs the registered body transformers against the parsed JSON value (JSON responses only),
+    // returning { value, applied }. The registry is reactive, so this re-evaluates once extensions
+    // finish registering — the same way headerRows picks up a late-registered resolver. ctx carries
+    // the operation (with its x-* extensions) and the full spec so a transformer can read its own
+    // config; responseSchema is null here (this view is schema-unaware).
+    const decodedResult = computed(() => {
+      if (kind.value !== 'json' || !parsedJson.value.ok) return { value: null, applied: false }
+      return runBodyTransformers(parsedJson.value.value, {
+        operation: props.operation,
+        responseSchema: null,
+        contentType: props.resp.contentType,
+        status: props.resp.status,
+        spec: specRoot()
+      })
+    })
+    // Whether any transformer applies to this response — gates the Decoded toggle's visibility.
+    const canDecode = computed(() => decodedResult.value.applied)
+
     const displayText = computed(() => {
+      if (kind.value === 'json' && decoded.value && canDecode.value) return JSON.stringify(decodedResult.value.value, null, 2)
       if (kind.value === 'json' && pretty.value && parsedJson.value.ok) return JSON.stringify(parsedJson.value.value, null, 2)
       return props.resp.rawBody || ''
     })
@@ -119,7 +146,7 @@ export default {
     }
 
     return {
-      pretty, copied, kind, isText, tooLarge, displayText, sizeText, imageUrl, downloadFilename, copy, download,
+      pretty, decoded, canDecode, copied, kind, isText, tooLarge, displayText, sizeText, imageUrl, downloadFilename, copy, download,
       headerRows, headersCopied, copyHeaders, statusKind
     }
   },
@@ -136,6 +163,7 @@ export default {
       <template v-else>
         <div class="resp-toolbar">
           <label v-if="kind === 'json'" class="resp-pretty"><input type="checkbox" v-model="pretty" /> Pretty-print</label>
+          <label v-if="kind === 'json' && canDecode" class="resp-decoded"><input type="checkbox" v-model="decoded" /> Decoded</label>
           <span v-if="tooLarge" class="hint resp-toolarge">Large response ({{ sizeText }}) — shown unformatted</span>
           <button v-if="isText" type="button" class="btn-mini" aria-live="polite" @click="copy">{{ copied ? '✓ Copied' : 'Copy' }}</button>
           <button type="button" class="btn-mini" @click="download">Download</button>
