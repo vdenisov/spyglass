@@ -7,13 +7,19 @@
   /* ----------------------------------------------------------------------
      Card is 1280x670 = the universal OG ratio 1.91:1 (canonical 1200x630),
      which Facebook / X / LinkedIn / Discord all expect and GitHub accepts.
-     To export cleanly (avoids OS-scaling / browser-zoom size surprises):
+
+     Export (pick one) -- both avoid OS-scaling / browser-zoom size surprises:
+       - Headless render (recommended: pixel-exact 2560x1340, no OS-scale
+         surprises). --force-device-scale-factor=2 gives the 2x; --window-size
+         matches the card so nothing crops. From PowerShell, as one line:
+           & "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1280,670 --screenshot="social-card.png" "file:///C:/Dev/Spyglass/docs/assets/social-card.html"
+         (chrome works the same; adjust the exe path / file path to yours.)
        - DevTools (F12) -> select the <div class="card"> element ->
          right-click -> "Capture node screenshot". Grabs the exact element
          bounds at your device pixel ratio (e.g. 1600x838 at 125% OS scale).
-       - Any 1.91:1 PNG >= ~1200px wide works; bigger is just sharper. Do NOT
-         stack browser zoom on top of OS scaling -- it lands on odd, non-1.91 sizes.
-       - Upload at: repo Settings -> Social preview.
+     Any 1.91:1 PNG >= ~1200px wide works; bigger is just sharper. Do NOT
+     stack browser zoom on top of OS scaling -- it lands on odd, non-1.91 sizes.
+     Upload at: repo Settings -> Social preview.
      Keep important text inside the 64px padding (some surfaces crop edges).
      -------------------------------------------------------------------- */
   :root {
@@ -46,8 +52,12 @@
     grid-template-columns: 1fr 520px;
   }
 
-  /* ---- Left: message ---- */
-  .left { padding: 64px; display: flex; flex-direction: column; justify-content: space-between; }
+  /* ---- Left: message ----
+     min-width:0 overrides the grid item's default min-width:auto (= content
+     min-width). Without it, a wide left-column line (e.g. the bottom feature
+     row) expands the 1fr track and shoves the fixed 520px mockup column off the
+     right edge. Pinning it to 0 keeps the mockup anchored regardless of copy. */
+  .left { padding: 64px; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
 
   .brand { display: flex; align-items: center; gap: 14px; }
   .brand .name { font-size: 40px; font-weight: 700; letter-spacing: .2px; }
@@ -68,8 +78,14 @@
 
   .sub { margin-top: 22px; font-size: 27px; line-height: 1.45; color: var(--body); max-width: 580px; }
 
-  .trust { display: flex; align-items: center; gap: 12px; font-size: 23px; font-weight: 500; color: var(--body); }
-  .trust .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--muted); opacity: .6; }
+  /* nowrap on each item prevents an ugly mid-word break at the "Schema-driven"
+     hyphen if space ever gets tight. */
+  .trust { display: flex; align-items: center; gap: 6px; font-size: 23px; font-weight: 500; color: var(--body); }
+  .trust span { white-space: nowrap; }
+  /* flex-shrink:0 keeps the dots at 4px: the nowrap text can't shrink, so
+     without this the empty dot spans would absorb all the flex shrink and
+     collapse to nothing. */
+  .trust .dot { flex: 0 0 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--muted); opacity: .6; }
   .trust b { color: var(--ink); font-weight: 600; }
 
   /* ---- Right: CSS-rendered explorer motif (vector, not a screenshot —
@@ -138,13 +154,13 @@
         <!-- Descriptive alternative (swap back if you ever want it):
         <h1>The <span class="hl">no-build</span> OpenAPI explorer you embed in your own service.</h1>
         -->
-        <p class="sub">An embeddable, no-build OpenAPI explorer<br>One dependency, no npm</p>
+        <p class="sub">Embeddable OpenAPI Explorer<br>Single drop-in dependency</p>
       </div>
 
       <div class="trust">
-        <span>Spring&nbsp;MVC&nbsp;+&nbsp;WebFlux</span><span class="dot"></span>
-        <span>Maven&nbsp;Central</span><span class="dot"></span>
-        <span>MIT</span>
+        <span>Schema-driven&nbsp;forms</span><span class="dot"></span>
+        <span>JSON&nbsp;validation</span><span class="dot"></span>
+        <span>Extensible&nbsp;by&nbsp;design</span>
       </div>
     </div>
 
