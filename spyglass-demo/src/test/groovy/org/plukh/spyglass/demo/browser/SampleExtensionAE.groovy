@@ -2,7 +2,10 @@ package org.plukh.spyglass.demo.browser
 
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.Route
+import spock.lang.Requires
 
+import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.function.Consumer
 
@@ -14,7 +17,7 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
  * info extension). Unlike {@code ExtensionSeamAE} — which loads the test probe via {@code ?ext=} — this
  * proves the spec-advertised, auto-load path with no query param, and exercises the seam hooks the
  * sample registers: an auth panel, a header preset, a response-header link resolver, and a footer item.
- * It doubles as the capture point for the README screenshot.
+ * It doubles as the capture point for the README light/dark hero screenshots.
  */
 class SampleExtensionAE extends SpyglassDemoSpecBase {
 
@@ -76,16 +79,33 @@ class SampleExtensionAE extends SpyglassDemoSpecBase {
         link.getAttribute('href').contains('GET-/apidocs-demo')
     }
 
-    def "captures a representative screenshot for the docs"() {
-        given: 'a landscape viewport — tight on the right, short enough to read as a README banner'
-        page.setViewportSize(1080, 720)
+    @Requires({ sys['spyglass.captureScreenshots'] == 'true' })
+    // Opt-in doc-artifact generator, not a behavioural check — excluded from normal runs so the
+    // suite stays behaviour-only. Regenerate the README heroes with:
+    //   mvn -pl spyglass-demo -am verify -Dspyglass.captureScreenshots=true -Dit.test=SampleExtensionAE
+    // then copy target/screenshots/explorer-*.png into docs/assets/.
+    def "captures the representative light and dark hero screenshots for the docs"() {
+        given: 'a landscape viewport — tight on the right, tall enough to keep the Send button in frame'
+        page.setViewportSize(1080, 780)
 
-        when: 'a form-forward operation is open (a oneOf/discriminator body, no query params)'
+        and: 'a form-forward operation is open (a oneOf/discriminator body, no query params)'
         open('POST-/apidocs-demo/shapes')
         page.waitForSelector('.op-panel .body-section')
 
-        then: 'a viewport (not full-page) screenshot is written to the build dir for docs/assets'
-        page.screenshot(new Page.ScreenshotOptions()
-                .setPath(Paths.get('target', 'screenshots', 'explorer.png')))
+        when: 'each theme is forced and a viewport (not full-page) screenshot is written per theme'
+        Map<String, Path> shots = ['Light': screenshotPath('explorer-light.png'),
+                                   'Dark' : screenshotPath('explorer-dark.png')]
+        shots.each { label, path ->
+            page.locator(".theme-toggle button[aria-label='Theme: ${label}']").click()
+            page.waitForSelector("html[data-theme='${label.toLowerCase()}']")
+            page.screenshot(new Page.ScreenshotOptions().setPath(path))
+        }
+
+        then: 'both hero images land in the build dir for docs/assets'
+        shots.values().every { Files.exists(it) }
+    }
+
+    private static Path screenshotPath(String name) {
+        Paths.get('target', 'screenshots', name)
     }
 }
