@@ -2,11 +2,21 @@
 
 **An embeddable, no-build OpenAPI explorer for Spring Boot.**
 
+[![Maven Central](https://img.shields.io/maven-central/v/org.plukh.spyglass/spyglass-spring-webmvc?label=Maven%20Central)](https://central.sonatype.com/artifact/org.plukh.spyglass/spyglass-spring-webmvc)
+[![CI](https://github.com/vdenisov/spyglass/actions/workflows/ci.yml/badge.svg)](https://github.com/vdenisov/spyglass/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Java](https://img.shields.io/badge/Java-21%2B-orange)](#compatibility)
+[![Live demo](https://img.shields.io/badge/Live%20demo-spyglass--demo.fly.dev-2dd4bf)](https://spyglass-demo.fly.dev/apidocs)
+
 Spyglass renders a service's OpenAPI 3.x document as browsable, executable API documentation and ships
 as a normal jar. Add one dependency and it replaces Swagger UI as your service's API docs page, served
 from your own origin — no npm, no bundler, no build step.
 
-![The Spyglass explorer rendering the demo service](docs/assets/explorer.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)"  srcset="docs/assets/explorer-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/explorer-light.png">
+  <img alt="The Spyglass explorer rendering the demo service" src="docs/assets/explorer-light.png">
+</picture>
 
 ## Why
 
@@ -25,6 +35,21 @@ served straight from the classpath — the consuming service just adds a depende
 It is deliberately scoped to the **one** service it's embedded in — it documents and exercises that
 service's own API, not a fleet. No proxy, no gateway, no service catalog.
 
+**At a glance — Spyglass vs Swagger UI:**
+
+| | Swagger UI | Spyglass |
+| --- | --- | --- |
+| Request body ("Try it out") | Raw JSON textarea pre-filled with an example; `oneOf`/`anyOf`/`discriminator` unions appear only in a read-only **Schema** tab — no variant picker | Schema-driven form: typed fields, enum selects, `oneOf`/`discriminator` variant picker, multipart & urlencoded forms — with per-field recent-value recall |
+| JSON editing | Plain textarea; no client-side payload validation (validates the spec, not your request body) | CodeMirror 6 with live JSON-Schema validation, inline errors, and schema-aware autocomplete |
+| Request history | None — each "Try it out" is transient; only authorization can persist (`persistAuthorization`) | Per-operation Request Log: browse, replay, and delete past request+response pairs; survives reload |
+| Build & extend | Bundled SPA (`swagger-ui-bundle.js`); plugin system, usually a JSX build; internal APIs aren't a stable contract | Static ESM app, no build to theme or extend; documented `register(api)` seam (auth panel, header presets, request/response transformers) |
+| How it's served | From the springdoc swagger-ui webjar at `/swagger-ui.html` | From your service's own classpath, same origin |
+
+Swagger UI still leads where Spyglass won't follow: its ubiquity and zero-config springdoc default,
+and full OAuth2 authorization-code (redirect) flows, which sit outside Spyglass's static,
+same-origin charter. A couple of its other conveniences — a built-in Authorize panel for standard
+`securitySchemes`, and shareable request deep-links — are on the Spyglass roadmap too.
+
 ## What you get
 
 - Operation browsing with a filterable, keyboard-navigable sidebar; deprecated-operation indicators.
@@ -33,10 +58,11 @@ service's own API, not a fleet. No proxy, no gateway, no service catalog.
 - A Raw-JSON editor (CodeMirror 6) with live schema validation; required-field warnings that don't
   block sending.
 - Same-origin "try it out", content-type-aware response rendering, named examples, request history,
-  persisted UI state, `curl` generation, markdown descriptions, and light/dark theming.
+  persisted UI state, `curl` / JetBrains `.http` snippet generation, markdown descriptions, and
+light/dark theming.
 - Trace-header deep-links via a vendor-neutral response-header link resolver hook.
 - A documented front-end **extension seam** so an embedding service can contribute its own UI (auth
-  panels, header presets, header-link resolvers) without forking the core.
+  panels, header presets, header-link resolvers, response-body transformers) without forking the core.
 
 ## Quick start
 
