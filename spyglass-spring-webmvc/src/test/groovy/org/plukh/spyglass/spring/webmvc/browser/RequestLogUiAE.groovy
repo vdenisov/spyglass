@@ -81,6 +81,40 @@ class RequestLogUiAE extends SpyglassSpecBase {
         assertThat(entry.locator('.code-viewer .cm-content').last()).containsText('"ok"')
     }
 
+    def "fills in the canonical reason phrase when the stored response carries none"() {
+        given: 'three stored responses: an empty phrase, a server-supplied phrase, and an unknown code'
+        open('GET-/widgets/{id}')
+        page.evaluate('''async () => {
+            const m = await import('/apidocs/js/requestLog.js')
+            const base = {
+                opId: 'GET /widgets/{id}',
+                req: { method: 'GET', absUrl: 'http://x/widgets/7', headers: { Accept: 'application/json' } },
+                snapshot: { params: {}, mediaType: '', useRaw: false, rawText: '' }
+            }
+            const resp = (status, statusText) => ({
+                status, statusText, durationMs: 1, contentType: 'application/json',
+                blob: new Blob(['{"ok":true}']), rawBody: '{"ok":true}',
+                headersList: [{ name: 'content-type', value: 'application/json' }]
+            })
+            await m.recordExecution({ ...base, response: resp(409, '') })
+            await m.recordExecution({ ...base, response: resp(200, 'Custom OK') })
+            await m.recordExecution({ ...base, response: resp(599, '') })
+        }''')
+
+        and: 'a normal execution refreshes the panel'
+        routeWidgets()
+        param('id').locator('.control input').fill('123')
+        page.click('.btn-send')
+        waitRendered(4)
+
+        expect: 'the empty phrase falls back to canonical, a supplied phrase is kept verbatim, an unknown code stays bare'
+        def labels = page.locator('.rl-status').allInnerTexts()*.trim()
+        labels.contains('409 Conflict')
+        labels.contains('200 Custom OK')
+        labels.contains('599')
+        !labels.any { it.startsWith('599 ') }
+    }
+
     def "replays a past entry back into this operation's form"() {
         given:
         open('GET-/widgets/{id}')

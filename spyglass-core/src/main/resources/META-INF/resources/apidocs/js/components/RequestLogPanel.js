@@ -1,6 +1,6 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { recordsForOp, deleteRecord, clear } from '../requestLog.js'
-import { statusKind, formatBytes } from '../format.js'
+import { statusKind, statusLabel, formatBytes } from '../format.js'
 import { copyText } from '../clipboard.js'
 import { loadJson, saveJson, RESPONSE_PRETTY_KEY } from '../storage.js'
 import CodeViewer from './CodeViewer.js'
@@ -104,7 +104,7 @@ export default {
             v-tip="expandedId === rec.id ? 'Collapse' : 'Expand'">
             <span class="rl-caret" aria-hidden="true">{{ expandedId === rec.id ? '▾' : '▸' }}</span>
             <span class="rl-time">{{ rec.timeLabel }}</span>
-            <span class="rl-status" :class="rec.statusClass">{{ rec.status }} {{ rec.statusText }}</span>
+            <span class="rl-status" :class="rec.statusClass">{{ rec.statusLabel }}</span>
             <span class="rl-size">{{ rec.sizeLabel }}</span>
           </button>
 
@@ -150,7 +150,7 @@ export default {
             <section class="rl-block">
               <h4 class="rl-block-head">Response</h4>
               <div class="resp-status" :class="rec.statusClass">
-                <span class="code">{{ rec.status }} {{ rec.statusText }}</span>
+                <span class="code">{{ rec.statusLabel }}</span>
                 <span v-if="rec.durationMs != null" class="dur">{{ rec.durationMs }} ms</span>
                 <span v-if="rec.respContentType" class="resp-ct">{{ rec.respContentType }}</span>
               </div>
@@ -191,7 +191,7 @@ function toViewModel(rec) {
     method: rec.request.method,
     url: rec.request.url,
     status: rec.response.status,
-    statusText: rec.response.statusText,
+    statusLabel: statusLabel(rec.response.status, rec.response.statusText),
     statusClass: statusKind(rec.response.status),
     durationMs: rec.response.durationMs,
     respContentType: rec.response.contentType,
