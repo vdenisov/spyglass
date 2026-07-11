@@ -36,6 +36,7 @@
   --z-dropdown: 50;
   --z-tooltip: 1000;
   --z-toast: 1100;   /* the update toast sits above tooltips so its Reload/Dismiss stay clickable */
+  --z-modal: 1200;   /* modal dialogs (KeyboardHelp) sit above everything, including the toast */
   /* Raw-JSON editor syntax tokens (CodeMirror); see JsonEditor.js. The light values are
      CodeMirror's own defaults (string=#a11, number=#164, bool=#219, null=#708 via keyword),
      restored so light mode is unchanged; the dark values are brightened, equally
@@ -916,6 +917,62 @@ h3 { margin: 18px 0 8px; font-size: 13px; }
   color: var(--muted); font-size: 14px; line-height: 1;
 }
 .update-toast-dismiss:hover { color: var(--text); }
+
+/* The topbar "?" that opens the keyboard-shortcuts help; a quiet, square icon button sized to sit
+   beside the theme toggle. */
+.btn-help {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--muted); font-size: 14px; font-weight: 700; line-height: 1; cursor: pointer;
+}
+.btn-help:hover { color: var(--text); }
+
+/* --- Modal dialog (KeyboardHelp; the reusable shell reused by future dialogs) --------------------- */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; background: rgba(0, 0, 0, .45);
+  animation: modal-fade .12s ease;
+}
+.modal {
+  display: flex; flex-direction: column;
+  width: 100%; max-width: 520px; max-height: calc(100vh - 48px);
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 10px 40px var(--shadow);
+  animation: modal-pop .14s ease;
+}
+.modal:focus { outline: none; }
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+}
+.modal-title { margin: 0; font-size: 15px; font-weight: 600; }
+.modal-close {
+  flex: 0 0 auto; padding: 4px; border: none; background: none; cursor: pointer;
+  color: var(--muted); font-size: 15px; line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 16px; overflow: auto; }
+@keyframes modal-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* Keyboard-shortcuts help content: one section per context, each a list of key badges + description. */
+.shortcuts-section + .shortcuts-section { margin-top: 18px; }
+.shortcuts-heading {
+  margin: 0 0 8px; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+}
+.shortcuts-list { margin: 0; }
+.shortcuts-row { display: flex; align-items: baseline; gap: 12px; padding: 4px 0; }
+.shortcut-keys { flex: 0 0 auto; display: flex; gap: 4px; min-width: 96px; }
+.shortcut-keys kbd {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px;
+  background: var(--bg-alt); white-space: nowrap;
+}
+.shortcut-desc { margin: 0; font-size: 13px; line-height: 1.4; }
 
 /* Respect a reduced-motion preference: near-instant transitions/animations (the tooltip fade, the
    theme/tab color transitions) and no smooth scrolling. */

@@ -268,12 +268,14 @@ export default {
     const onFocusin = (e) => focusStateFrom(e.target)
     const onFocusout = (e) => focusStateFrom(e.relatedTarget)
 
-    // "/" jumps to the filter — but not while typing in a field or the CodeMirror editor.
+    // "/" jumps to the filter — but not while typing in a field or the CodeMirror editor, and not
+    // while a modal dialog is open (focusing the filter behind the backdrop would break its focus trap).
     const onGlobalKeydown = (e) => {
       if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target
       const tag = (t && t.tagName || '').toUpperCase()
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return
+      if (document.querySelector('[role="dialog"]')) return
       e.preventDefault()
       if (filterInput.value) { filterInput.value.focus(); filterInput.value.select() }
     }
