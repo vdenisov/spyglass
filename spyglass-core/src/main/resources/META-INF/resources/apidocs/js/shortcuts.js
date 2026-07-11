@@ -40,7 +40,8 @@ export const SHORTCUTS = [
       { keys: ['←'], desc: 'Narrow the sidebar (hold Shift for larger steps)' },
       { keys: ['→'], desc: 'Widen the sidebar (hold Shift for larger steps)' },
       { keys: ['Home'], desc: 'Sidebar to its minimum width' },
-      { keys: ['End'], desc: 'Sidebar to its maximum width' }
+      { keys: ['End'], desc: 'Sidebar to its maximum width' },
+      { keys: ['f'], desc: 'Fit the sidebar to the widest operation' }
     ]
   }
 ]
