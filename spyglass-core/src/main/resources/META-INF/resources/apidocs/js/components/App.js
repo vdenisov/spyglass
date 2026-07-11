@@ -217,25 +217,42 @@ export default {
     // The sidebar may not exceed half the viewport, and never shrinks below MIN_SIDEBAR.
     const clampWidth = (px) => Math.min(Math.max(px, MIN_SIDEBAR), Math.floor(window.innerWidth * 0.5))
 
-    // Default width = widest operation row (so paths don't wrap), capped at 50%.
+    // Default width = widest operation row (so paths don't wrap), capped at 50%. Each row is a
+    // full-width flex button, so its scrollWidth only exceeds the row when the content overflows —
+    // useless for fitting *down* from an already-wide sidebar. Instead measure the intrinsic content
+    // extent: the row's left edge to the right edge of its widest child, which is independent of the
+    // row's current (stretched) width. Falls back to scrollWidth for a row with no element children.
     const measureSidebar = () => {
       let max = 0
-      document.querySelectorAll('.op-link').forEach(l => { if (l.scrollWidth > max) max = l.scrollWidth })
-      if (max > 0) sidebarWidth.value = clampWidth(max + 28)
+      document.querySelectorAll('.op-link').forEach(l => {
+        const left = l.getBoundingClientRect().left
+        let right = 0
+        for (const c of l.children) { const r = c.getBoundingClientRect().right; if (r > right) right = r }
+        const w = right > left ? right - left : l.scrollWidth
+        if (w > max) max = w
+      })
+      if (max > 0) sidebarWidth.value = clampWidth(Math.ceil(max) + 16)
     }
+
+    // Fit-to-content on demand — the same measurement as the initial default width, re-run when the
+    // user double-clicks the divider or presses "f" while it's focused (a spreadsheet-style auto-size).
+    // Like the drag it's clamped to [MIN_SIDEBAR, 50% of the viewport], so a path wider than the cap
+    // settles at the cap rather than expanding without bound.
+    const fitSidebar = () => measureSidebar()
 
     // Re-clamp the sidebar against the new viewport (the cap is half the width). Named so it — and the
     // hashchange handler — can be removed on unmount rather than leaking past the component's life.
     const onResize = () => { sidebarWidth.value = clampWidth(sidebarWidth.value) }
 
     // Keyboard resize for the focusable divider (role=separator): arrows nudge (Shift = coarser),
-    // Home/End jump to the min/max. Mirrors the drag, clamped the same way.
+    // Home/End jump to the min/max, "f" fits to the widest row. Mirrors the drag, clamped the same way.
     const onDividerKey = (e) => {
       const step = e.shiftKey ? 40 : 16
       if (e.key === 'ArrowLeft') { e.preventDefault(); sidebarWidth.value = clampWidth(sidebarWidth.value - step) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); sidebarWidth.value = clampWidth(sidebarWidth.value + step) }
       else if (e.key === 'Home') { e.preventDefault(); sidebarWidth.value = clampWidth(MIN_SIDEBAR) }
       else if (e.key === 'End') { e.preventDefault(); sidebarWidth.value = clampWidth(window.innerWidth) }
+      else if (e.key.toLowerCase() === 'f') { e.preventDefault(); fitSidebar() }
     }
 
     const startDrag = () => {
@@ -343,7 +360,7 @@ export default {
       loading, error, title, operations, selected, baseUrl, headers, sidebarWidth,
       authorizationValue, setAuthorization, authResetSeq,
       accept, acceptOptions, onAcceptInput,
-      addHeader, removeHeader, select, startDrag, onDividerKey, minSidebar: MIN_SIDEBAR, clearHeaders,
+      addHeader, removeHeader, select, startDrag, onDividerKey, fitSidebar, minSidebar: MIN_SIDEBAR, clearHeaders,
       currentExec, recordExecution, requestLogUi, brandingShow,
       headerPresets: registry.headerPresets, authPanels: registry.authPanels, headerToAdd, addPreset,
       updateToastShow: updateCheck.show, onUpdateReload: updateCheck.reload, onUpdateDismiss: updateCheck.dismiss,
@@ -356,7 +373,8 @@ export default {
         :style="{ flex: '0 0 ' + sidebarWidth + 'px', width: sidebarWidth + 'px' }" />
       <div class="divider" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"
         :aria-valuenow="Math.round(sidebarWidth)" :aria-valuemin="minSidebar" tabindex="0"
-        @mousedown.prevent="startDrag" @keydown="onDividerKey" v-tip="'Drag, or focus and use ←/→ to resize'"></div>
+        @mousedown.prevent="startDrag" @dblclick.prevent="fitSidebar" @keydown="onDividerKey"
+        v-tip="'Drag to resize; double-click to fit. When focused: ←/→ resize, Home/End min/max, f to fit.'"></div>
       <main class="main">
         <div class="topbar-wrap">
         <div class="topbar">
