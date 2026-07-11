@@ -217,21 +217,45 @@ export default {
     // The sidebar may not exceed half the viewport, and never shrinks below MIN_SIDEBAR.
     const clampWidth = (px) => Math.min(Math.max(px, MIN_SIDEBAR), Math.floor(window.innerWidth * 0.5))
 
-    // Default width = widest operation row (so paths don't wrap), capped at 50%. Each row is a
-    // full-width flex button, so its scrollWidth only exceeds the row when the content overflows —
-    // useless for fitting *down* from an already-wide sidebar. Instead measure the intrinsic content
-    // extent: the row's left edge to the right edge of its widest child, which is independent of the
-    // row's current (stretched) width. Falls back to scrollWidth for a row with no element children.
+    // Default width = the narrowest width at which the operation list shows no horizontal scrollbar
+    // (so paths aren't clipped), capped at 50%. Two steps, because a row is a full-width flex button
+    // whose own scrollWidth can't reveal how much wider its content wants to be:
+    //   (1) an ideal lower bound — with the sidebar temporarily widened off-screen, the widest row's
+    //       content extent (its left edge to the right edge of its widest child);
+    //   (2) grow from there until the list stops overflowing horizontally (scrollWidth <= clientWidth).
+    //       Measured on the real constrained layout, step 2 absorbs the paddings, the vertical
+    //       scrollbar's width, and the sub-pixel accumulation of glyph positions at a fractional
+    //       devicePixelRatio (a HiDPI / OS-scaled display) — none of which step 1 can see.
+    // All synchronous: each width write forces the reflow the next read observes, so nothing paints
+    // until the final reactive width is committed.
     const measureSidebar = () => {
-      let max = 0
+      const el = document.querySelector('.sidebar')
+      const list = el && el.querySelector('.op-list')
+      if (!el || !list) return
+      const savedWidth = el.style.width
+      const savedFlex = el.style.flex
+      const setW = (px) => { el.style.flex = '0 0 ' + px + 'px'; el.style.width = px + 'px' }
+
+      setW(10000)
+      const sidebarLeft = el.getBoundingClientRect().left
+      let maxRight = 0
       document.querySelectorAll('.op-link').forEach(l => {
-        const left = l.getBoundingClientRect().left
-        let right = 0
-        for (const c of l.children) { const r = c.getBoundingClientRect().right; if (r > right) right = r }
-        const w = right > left ? right - left : l.scrollWidth
-        if (w > max) max = w
+        for (const c of l.children) { const r = c.getBoundingClientRect().right; if (r > maxRight) maxRight = r }
       })
-      if (max > 0) sidebarWidth.value = clampWidth(Math.ceil(max) + 16)
+      if (maxRight <= sidebarLeft) { el.style.width = savedWidth; el.style.flex = savedFlex; return }
+
+      let target = clampWidth(Math.ceil(maxRight - sidebarLeft) + 8)
+      const maxTarget = clampWidth(Number.MAX_SAFE_INTEGER)
+      for (let i = 0; i < 6 && target < maxTarget; i++) {
+        setW(target)
+        const over = list.scrollWidth - list.clientWidth
+        if (over <= 0) break
+        target = clampWidth(Math.ceil(target + over + 1))
+      }
+
+      el.style.width = savedWidth
+      el.style.flex = savedFlex
+      sidebarWidth.value = target
     }
 
     // Fit-to-content on demand — the same measurement as the initial default width, re-run when the
@@ -252,7 +276,8 @@ export default {
       else if (e.key === 'ArrowRight') { e.preventDefault(); sidebarWidth.value = clampWidth(sidebarWidth.value + step) }
       else if (e.key === 'Home') { e.preventDefault(); sidebarWidth.value = clampWidth(MIN_SIDEBAR) }
       else if (e.key === 'End') { e.preventDefault(); sidebarWidth.value = clampWidth(window.innerWidth) }
-      else if (e.key.toLowerCase() === 'f') { e.preventDefault(); fitSidebar() }
+      // Plain "f" only — don't hijack Ctrl/Cmd+F (browser find) or other modified combos.
+      else if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); fitSidebar() }
     }
 
     const startDrag = () => {
@@ -374,7 +399,7 @@ export default {
       <div class="divider" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"
         :aria-valuenow="Math.round(sidebarWidth)" :aria-valuemin="minSidebar" tabindex="0"
         @mousedown.prevent="startDrag" @dblclick.prevent="fitSidebar" @keydown="onDividerKey"
-        v-tip="'Drag to resize; double-click to fit. When focused: ←/→ resize, Home/End min/max, f to fit.'"></div>
+        v-tip.cursor="'Drag to resize; double-click to fit. When focused: ←/→ resize, Home/End min/max, f to fit.'"></div>
       <main class="main">
         <div class="topbar-wrap">
         <div class="topbar">

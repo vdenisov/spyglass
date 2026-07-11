@@ -15,6 +15,12 @@ let tipEl = null
 let activeTarget = null
 let showTimer = null
 let listenersBound = false
+// Last known pointer position, for `.cursor` tooltips that anchor to the mouse instead of the target
+// rect (used by the full-height resize divider, whose rect spans the whole page). pointerActive is
+// false when the tooltip was triggered by keyboard focus, so it falls back to rect positioning.
+let pointerX = 0
+let pointerY = 0
+let pointerActive = false
 
 function ensureTip() {
   if (tipEl) return tipEl
@@ -39,14 +45,24 @@ function position(el, text) {
   const tip = ensureTip()
   tip.textContent = text
   // Measure with layout present (opacity 0, not display:none) before revealing.
-  const r = el.getBoundingClientRect()
   const tw = tip.offsetWidth
   const th = tip.offsetHeight
 
-  let top = r.top - th - TARGET_GAP
-  if (top < VIEWPORT_MARGIN) top = r.bottom + TARGET_GAP // flip below when there's no room above
-
-  let left = r.left + r.width / 2 - tw / 2
+  let top, left
+  if (el.__tipCursor && pointerActive) {
+    // Anchor to the cursor: a tall/thin target (the resize divider) has no meaningful rect anchor,
+    // so show the hint just below-right of the pointer.
+    top = pointerY + 18
+    left = pointerX + 12
+  } else {
+    const r = el.getBoundingClientRect()
+    top = r.top - th - TARGET_GAP
+    if (top < VIEWPORT_MARGIN) top = r.bottom + TARGET_GAP // flip below when there's no room above
+    left = r.left + r.width / 2 - tw / 2
+  }
+  // Clamp into the viewport so a tall target (or a cursor near an edge) still shows a fully visible
+  // tooltip rather than one pinned off-screen.
+  top = Math.max(VIEWPORT_MARGIN, Math.min(top, window.innerHeight - th - VIEWPORT_MARGIN))
   left = Math.max(VIEWPORT_MARGIN, Math.min(left, window.innerWidth - tw - VIEWPORT_MARGIN))
 
   tip.style.top = Math.round(top) + 'px'
@@ -72,18 +88,30 @@ function hide() {
 }
 
 function attach(el) {
-  const enter = () => {
+  const enter = (e) => {
     if (!el.__tipText) return
+    // Track the pointer for `.cursor` tooltips; a focus activation (no clientX) falls back to rect.
+    if (el.__tipCursor) {
+      if (e && typeof e.clientX === 'number') { pointerX = e.clientX; pointerY = e.clientY; pointerActive = true }
+      else pointerActive = false
+    }
     clearTimeout(showTimer)
     showTimer = setTimeout(() => show(el, el.__tipText), SHOW_DELAY_MS)
   }
   const leave = () => {
     if (activeTarget === el || showTimer) hide()
   }
+  // For `.cursor` tooltips, follow the pointer while the hint is shown.
+  const move = (e) => {
+    pointerX = e.clientX; pointerY = e.clientY; pointerActive = true
+    if (activeTarget === el) position(el, el.__tipText)
+  }
   el.__tipEnter = enter
   el.__tipLeave = leave
+  el.__tipMove = move
   el.addEventListener('mouseenter', enter)
   el.addEventListener('mouseleave', leave)
+  if (el.__tipCursor) el.addEventListener('mousemove', move)
   // `.hover` opts out of the focus trigger (e.g. the sidebar op rows, where it's noisy during arrow
   // navigation and the opened panel already shows the summary). Those elements carry the hint for
   // assistive tech in their own accessible name instead.
@@ -96,6 +124,7 @@ function attach(el) {
 function detach(el) {
   el.removeEventListener('mouseenter', el.__tipEnter)
   el.removeEventListener('mouseleave', el.__tipLeave)
+  el.removeEventListener('mousemove', el.__tipMove)
   el.removeEventListener('focusin', el.__tipEnter)
   el.removeEventListener('focusout', el.__tipLeave)
 }
@@ -104,6 +133,7 @@ export default {
   mounted(el, binding) {
     el.__tipText = binding.value || ''
     el.__tipHoverOnly = !!binding.modifiers.hover
+    el.__tipCursor = !!binding.modifiers.cursor
     attach(el)
   },
   updated(el, binding) {
