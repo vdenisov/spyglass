@@ -10,6 +10,7 @@ import Sidebar from './Sidebar.js'
 import OperationPanel from './OperationPanel.js'
 import ThemeToggle from './ThemeToggle.js'
 import UpdateToast from './UpdateToast.js'
+import KeyboardHelp from './KeyboardHelp.js'
 
 const MIN_SIDEBAR = 240
 
@@ -18,7 +19,7 @@ const MIN_SIDEBAR = 240
 // front-end extensions through the seam (see extensions.js); the core ships none of it.
 export default {
   name: 'App',
-  components: { Sidebar, OperationPanel, ThemeToggle, UpdateToast },
+  components: { Sidebar, OperationPanel, ThemeToggle, UpdateToast, KeyboardHelp },
   setup() {
     const loading = ref(true)
     const error = ref('')
@@ -251,6 +252,23 @@ export default {
       window.addEventListener('mouseup', onUp)
     }
 
+    // Keyboard-shortcuts help overlay (KeyboardHelp.js). App owns the open state and the "?" hotkey
+    // (a feature-specific keybinding); the dialog's own Escape-to-close, focus trap and focus restore
+    // live in the reusable Modal. "?" toggles it from anywhere except while typing in a field — same
+    // editable-target guard as the sidebar's "/" (Sidebar.js). "?" is Shift+/, so it never collides
+    // with the "/" shortcut (that handler only fires on e.key === '/').
+    const helpShow = ref(false)
+    const toggleHelp = () => { helpShow.value = !helpShow.value }
+    const closeHelp = () => { helpShow.value = false }
+    const onHelpKey = (e) => {
+      if (e.key !== '?' || e.ctrlKey || e.metaKey || e.altKey) return
+      const t = e.target
+      const tag = (t && t.tagName || '').toUpperCase()
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return
+      e.preventDefault()
+      toggleHelp()
+    }
+
     onMounted(async () => {
       try {
         const spec = await loadSpec(CONFIG.specUrl)
@@ -288,10 +306,12 @@ export default {
       }
       window.addEventListener('hashchange', applyHash)
       window.addEventListener('resize', onResize)
+      document.addEventListener('keydown', onHelpKey)
     })
     onBeforeUnmount(() => {
       window.removeEventListener('hashchange', applyHash)
       window.removeEventListener('resize', onResize)
+      document.removeEventListener('keydown', onHelpKey)
     })
 
     // Persist request state on change. Authorization value → sessionStorage (short-lived token);
@@ -326,7 +346,8 @@ export default {
       addHeader, removeHeader, select, startDrag, onDividerKey, minSidebar: MIN_SIDEBAR, clearHeaders,
       currentExec, recordExecution, requestLogUi, brandingShow,
       headerPresets: registry.headerPresets, authPanels: registry.authPanels, headerToAdd, addPreset,
-      updateToastShow: updateCheck.show, onUpdateReload: updateCheck.reload, onUpdateDismiss: updateCheck.dismiss
+      updateToastShow: updateCheck.show, onUpdateReload: updateCheck.reload, onUpdateDismiss: updateCheck.dismiss,
+      helpShow, toggleHelp, closeHelp
     }
   },
   template: `
@@ -343,6 +364,8 @@ export default {
             <button class="btn-mini danger btn-clear-headers" type="button" @click="clearHeaders"
               v-tip="'Clears the shared request settings — the global headers, Accept, and any extension panels. Per-operation inputs (path, query, body) are kept — use an operation\\'s Reset to clear it. Field history, layout and theme are kept.'">Clear headers</button>
             <ThemeToggle />
+            <button class="btn-help" type="button" @click="toggleHelp" aria-label="Keyboard shortcuts"
+              aria-haspopup="dialog" :aria-expanded="helpShow ? 'true' : 'false'" v-tip="'Keyboard shortcuts (?)'"><span aria-hidden="true">?</span></button>
           </div>
           <div class="topbar-main">
           <div class="topbar-left">
@@ -385,6 +408,7 @@ export default {
         <div v-else class="status-msg" role="status">Select an operation from the left.</div>
       </main>
       <UpdateToast :show="updateToastShow" :title="title" @reload="onUpdateReload" @dismiss="onUpdateDismiss" />
+      <KeyboardHelp :show="helpShow" @close="closeHelp" />
     </div>
   `
 }
