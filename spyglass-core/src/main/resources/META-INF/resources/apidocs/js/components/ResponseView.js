@@ -3,7 +3,7 @@ import { copyText } from '../clipboard.js'
 import { resolveHeaderLink, runBodyTransformers } from '../extensions.js'
 import { specRoot } from '../spec.js'
 import { loadJson, saveJson, RESPONSE_PRETTY_KEY, RESPONSE_DECODED_KEY } from '../storage.js'
-import { formatBytes, statusKind, filenameFromDisposition } from '../format.js'
+import { formatBytes, statusKind, statusLabel, filenameFromDisposition } from '../format.js'
 import { useFlash } from '../useFlash.js'
 import CodeViewer from './CodeViewer.js'
 
@@ -147,13 +147,13 @@ export default {
 
     return {
       pretty, decoded, canDecode, copied, kind, isText, tooLarge, displayText, sizeText, imageUrl, downloadFilename, copy, download,
-      headerRows, headersCopied, copyHeaders, statusKind
+      headerRows, headersCopied, copyHeaders, statusKind, statusLabel
     }
   },
   template: `
     <div class="response">
       <div class="resp-status" :class="statusKind(resp.status)" role="status">
-        <span class="code">{{ resp.status }} {{ resp.statusText }}</span>
+        <span class="code">{{ statusLabel(resp.status, resp.statusText) }}</span>
         <span v-if="resp.durationMs != null" class="dur">{{ resp.durationMs }} ms</span>
         <span v-if="resp.contentType" class="resp-ct">{{ resp.contentType }}</span>
       </div>
