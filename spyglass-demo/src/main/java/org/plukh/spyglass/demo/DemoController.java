@@ -115,6 +115,20 @@ public class DemoController {
     }
 
     @Operation(
+            operationId = "com.example.api.billing.invoices.resource.InternalInvoiceLineItemResource.deleteInvoiceLineItemAttachments",
+            summary = "Long operation ID — tail-match snippet windowing demo",
+            description = "Demo — carries a long, fully-qualified operationId whose matched method fragment sits at "
+                    + "the tail. Filter the sidebar by `attachments` (a token unique to the operationId — the short "
+                    + "path deliberately doesn't contain it) and drag the divider in: the operationId snippet windows "
+                    + "around the match so the found marker stays visible instead of being clipped off the right edge.")
+    @ApiResponse(responseCode = "204", description = "The resource was deleted; no body is returned.")
+    @DeleteMapping("/long-operation-id/{id}")
+    public ResponseEntity<Void> deleteInvoiceLineItemAttachments(
+            @Parameter(description = "The id of the resource to delete.") @PathVariable("id") String id) {
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
             summary = "Send a payload (anyOf)",
             description = "Demo — exercises the multi-branch anyOf form: both object branches can be checked at "
                     + "once and the body merges them (a scalar anyOf would stay single-select instead).")

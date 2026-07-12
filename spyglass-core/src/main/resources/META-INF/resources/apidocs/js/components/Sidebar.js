@@ -6,20 +6,21 @@ import { registry } from '../extensions.js'
 // While a filter is active the sidebar abandons tag grouping for a relevance-ranked, sectioned
 // list: each operation is bucketed under the single highest-precedence field it matched. path and
 // method matches are already visible in the row (highlighted in place); operationId and summary
-// matches aren't, so they're explained on a second line (operationId in full, summary windowed
-// around the match). Precedence is the MATCH_FIELDS order below.
+// matches aren't, so they're explained on a second line, each windowed around the match so the
+// found marker stays visible at any column width. Precedence is the MATCH_FIELDS order below.
 const MATCH_FIELDS = [
   { key: 'path', label: 'In path', get: op => op.path },
   { key: 'operationId', label: 'In operation ID', get: op => op.operationId },
   { key: 'method', label: 'In method', get: op => op.method },
   { key: 'summary', label: 'In summary', get: op => op.summary }
 ]
-// Summary-snippet windowing. A matched summary is shown whole when it fits the snippet column; when
-// it's too long a window slides over it so the match stays visible near the right with a little
-// trailing margin, dropping the least head necessary (marked with a leading …). Both the column width
-// and the text width are *measured* with a canvas using the snippet's real font (see remeasure), not
-// estimated from an average glyph width — so it stays correct across fonts/zoom and trims smoothly as
-// the divider is dragged.
+// Snippet windowing (operationId and summary). A matched snippet is shown whole when it fits the
+// snippet column; when it's too long a window slides over it so the match stays visible near the
+// right with a little trailing margin, dropping the least head necessary (marked with a leading …).
+// Both the column width and the text width are *measured* with a canvas using the snippet's real
+// font (see remeasure), not estimated from an average glyph width — so it stays correct across
+// fonts/zoom and trims smoothly as the divider is dragged. This matters most for operationIds, which
+// are typically long fully-qualified names whose matched method fragment sits at the tail.
 const SNIPPET_TAIL_PX = 36          // trailing margin kept past the match when windowed, so it isn't
                                     // flush against (or clipped by) the right edge
 
@@ -46,12 +47,11 @@ const highlightParts = (text, f) => {
   ]
 }
 
-// Highlight parts for a summary snippet, windowed to fit width `px` using `ctx` (a canvas context
-// carrying the snippet's font). Collapses whitespace; shows the whole string when it fits (or when
-// measurement isn't ready yet, px 0); otherwise drops the least head so the match's right edge plus
-// SNIPPET_TAIL_PX still fits, prefixing … . f is assumed lowercased and present in the summary.
-const summaryParts = (summary, f, ctx, px) => {
-  const text = (summary || '').replace(/\s+/g, ' ').trim()
+// Highlight parts for a snippet, windowed to fit width `px` using `ctx` (a canvas context carrying
+// the snippet's font). `text` is assumed already normalized. Shows the whole string when it fits (or
+// when measurement isn't ready yet, px 0); otherwise drops the least head so the match's right edge
+// plus SNIPPET_TAIL_PX still fits, prefixing … . f is assumed lowercased and present in the text.
+const windowedParts = (text, f, ctx, px) => {
   const i = text.toLowerCase().indexOf(f)
   if (i < 0) return [{ t: text, mark: false }]
   const end = i + f.length
@@ -98,20 +98,30 @@ export default {
     const rootEl = ref(null)
     const q = computed(() => filter.value.trim().toLowerCase())
     const filtering = computed(() => q.value.length > 0)
-    // Live measurement for summary-snippet windowing: the available width of a snippet box (reactive,
-    // so snippets re-window when it changes) and a canvas context carrying the snippet's real font.
+    // Live measurement for snippet windowing: the available width of a snippet box (reactive, so
+    // snippets re-window when it changes) and a canvas context carrying the snippet's real font.
     // Refreshed on mount, on resize, and after renders that change the list (see remeasure / onUpdated).
     const availPx = ref(0)
     let measureCtx = null
+    let listPadX = 0        // op-list left+right padding plus the row's left padding, captured once
     const remeasure = () => {
-      const snip = rootEl.value && rootEl.value.querySelector('.op-snippet')
+      const list = rootEl.value && rootEl.value.querySelector('.op-list')
+      const snip = list && list.querySelector('.op-snippet')
       if (!snip) return
-      if (snip.clientWidth) availPx.value = snip.clientWidth
       if (!measureCtx) {
         measureCtx = document.createElement('canvas').getContext('2d')
         const cs = getComputedStyle(snip)
         measureCtx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
+        const lcs = getComputedStyle(list)
+        listPadX = (parseFloat(lcs.paddingLeft) || 0) + (parseFloat(lcs.paddingRight) || 0)
+          + (parseFloat(getComputedStyle(snip.parentElement).paddingLeft) || 0)
       }
+      // .op-snippet spans the whole row (min-width:100%), so when a long path widens the row past the
+      // visible column the snippet's own width tracks that max-content, not what's on screen — which
+      // would leave the window barely eliding and the marker scrolled off the right. Cap the budget by
+      // the list's visible inner width so the window keeps eliding enough to hold the marker on screen.
+      const w = Math.min(snip.clientWidth, list.clientWidth - listPadX)
+      if (w > 0) availPx.value = w
     }
     // Unfiltered view: every operation grouped by tag, tags sorted (ops keep spec order within a tag).
     const groups = computed(() => {
@@ -149,12 +159,12 @@ export default {
 
     // Highlight parts for a row's method/path — only the field that actually matched is highlighted;
     // the other renders as a single plain part. The explanatory second line (snippetParts) is the
-    // windowed summary or the full operationId, or null for path/method matches (no snippet).
+    // windowed operationId or summary, or null for path/method matches (no snippet).
     const methodParts = (row) => highlightParts(row.op.method, row.field === 'method' ? q.value : '')
     const pathParts = (row) => highlightParts(row.op.path, row.field === 'path' ? q.value : '')
     const snippetParts = (row) => {
-      if (row.field === 'operationId') return highlightParts(row.op.operationId, q.value)
-      if (row.field === 'summary') return summaryParts(row.op.summary, q.value, measureCtx, availPx.value)
+      if (row.field === 'operationId') return windowedParts(row.op.operationId || '', q.value, measureCtx, availPx.value)
+      if (row.field === 'summary') return windowedParts((row.op.summary || '').replace(/\s+/g, ' ').trim(), q.value, measureCtx, availPx.value)
       return null
     }
     const activeIndex = ref(0)
