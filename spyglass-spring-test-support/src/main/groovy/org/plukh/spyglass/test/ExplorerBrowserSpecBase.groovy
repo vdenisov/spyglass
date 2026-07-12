@@ -241,7 +241,7 @@ abstract class ExplorerBrowserSpecBase extends Specification {
 
     /** The field's own "include" checkbox (omit-vs-send toggle), for leaf fields and objects alike. */
     protected Locator includeBox(String label) {
-        field(label).locator(':scope > .field-row > .control > input.include, :scope > .field-label > input.include')
+        field(label).locator(':scope > .field-row > .field-include > input.include, :scope > .field-label > input.include')
     }
 
     protected Locator textInput(String label) {
