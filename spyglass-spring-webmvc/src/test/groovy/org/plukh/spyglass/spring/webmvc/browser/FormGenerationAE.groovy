@@ -49,6 +49,16 @@ class FormGenerationAE extends SpyglassSpecBase {
         selectInput('active').locator('option').allTextContents() == ['true', 'false']
     }
 
+    def "aligns value controls across required and optional rows"() {
+        expect: 'a required string input and an optional one (with its include toggle) start at the same x'
+        def requiredX = textInput('name').boundingBox().x     // required: no include toggle
+        def optionalX = textInput('code').boundingBox().x     // optional: include toggle present
+        Math.abs(requiredX - optionalX) < 0.5
+
+        and: 'a required enum select aligns with an optional enum select as well'
+        Math.abs(selectInput('priority').boundingBox().x - selectInput('status').boundingBox().x) < 0.5
+    }
+
     def "renders a nested object with its child fields (recursion)"() {
         expect:
         field('address').getAttribute('class').contains('kind-object')

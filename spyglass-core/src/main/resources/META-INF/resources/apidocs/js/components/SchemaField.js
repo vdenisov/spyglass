@@ -130,8 +130,10 @@ export default {
       <template v-else-if="node.kind === 'string'">
         <div class="field-row">
           <span v-if="label" class="field-label">{{ label }}<span v-if="required" class="req">*</span></span>
-          <span class="control">
+          <span v-if="label" class="field-include">
             <input v-if="!required" type="checkbox" class="include" v-model="node.include" v-tip="'include this field'" />
+          </span>
+          <span class="control">
             <ComboBox :type="inputType" v-model="node.value" :disabled="!required && !node.include" :placeholder="placeholder"
                       :minlength="node.minLength" :maxlength="node.maxLength" :pattern="node.pattern || null"
                       :options="histValues || []" :deletable="!!histForget" @remove="histForget" v-tip="exampleTip" />
@@ -144,6 +146,7 @@ export default {
       <template v-else-if="node.kind === 'number'">
         <div class="field-row">
           <span v-if="label" class="field-label">{{ label }}<span v-if="required" class="req">*</span></span>
+          <span v-if="label" class="field-include"></span>
           <span class="control">
             <ComboBox type="number" v-model="node.value" :step="node.multipleOf || (node.integer ? '1' : 'any')"
                       :min="node.minimum" :max="node.maximum" :options="histValues || []" :deletable="!!histForget" @remove="histForget"
@@ -157,8 +160,10 @@ export default {
       <template v-else-if="node.kind === 'boolean'">
         <div class="field-row">
           <span v-if="label" class="field-label">{{ label }}<span v-if="required" class="req">*</span></span>
-          <span class="control">
+          <span v-if="label" class="field-include">
             <input v-if="!required" type="checkbox" class="include" v-model="node.include" v-tip="'include this field'" />
+          </span>
+          <span class="control">
             <select v-model="node.value" :disabled="!required && !node.include">
               <option :value="true">true</option>
               <option :value="false">false</option>
@@ -171,8 +176,10 @@ export default {
       <template v-else-if="node.kind === 'enum'">
         <div class="field-row">
           <span v-if="label" class="field-label">{{ label }}<span v-if="required" class="req">*</span></span>
-          <span class="control">
+          <span v-if="label" class="field-include">
             <input v-if="!required" type="checkbox" class="include" v-model="node.include" v-tip="'include this field'" />
+          </span>
+          <span class="control">
             <select v-model="node.value" :disabled="!required && !node.include">
               <option v-if="required" value="">— choose —</option>
               <option v-for="o in node.options" :key="o" :value="o">{{ o }}</option>
@@ -219,6 +226,7 @@ export default {
       <template v-else-if="node.kind === 'file'">
         <div class="field-row">
           <span v-if="label" class="field-label">{{ label }}<span v-if="required" class="req">*</span> <span class="type-tag" v-tip="node.multiple ? 'One or more files (sent as multipart/form-data)' : 'A file (sent as multipart/form-data)'">file</span></span>
+          <span v-if="label" class="field-include"></span>
           <span class="control">
             <label class="file-picker">
               <input type="file" class="file-input" :multiple="node.multiple" @change="onFile" />

@@ -392,7 +392,12 @@ h3 { margin: 18px 0 8px; font-size: 13px; }
   padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; min-width: 240px;
 }
 .control .combobox-input:disabled { background: var(--bg-alt); color: var(--muted); }
-.control input.include { min-width: 0; }
+/* Fixed-width gutter for the optional-field "include" checkbox, reserved on every leaf row
+   (empty on required rows and on kinds without a toggle) so value controls align down the form. */
+.field-include { flex: 0 0 16px; display: flex; align-items: center; justify-content: center; }
+/* Zero the native checkbox margins so it fits the gutter's fixed basis — otherwise its intrinsic
+   min-content (checkbox + UA margins) exceeds 16px and, with flex-shrink 0, widens the gutter. */
+.field-include input.include { margin: 0; }
 
 .object-body.nested {
   border-left: 2px solid var(--border); padding-left: 14px; margin: 4px 0 8px;
