@@ -146,22 +146,15 @@ body {
   flex-direction: column;
   overflow: hidden;
 }
-/* A wide, easy-to-grab hit area (so it's comfortable to drag and to double-click for fit-to-content)
-   with the visible line kept a thin 5px bar centered inside it. The extra width sits between the
-   sidebar and main, so it never overlaps the sidebar's scrollbar. */
+/* A thin resize bar between the sidebar and main; the whole 5px width is the visible line, so both
+   panes meet it seamlessly. Drag to resize, double-click (or "f" when focused) to fit-to-content. */
 .divider {
-  flex: 0 0 11px;
+  flex: 0 0 5px;
   cursor: col-resize;
-  background: transparent;
-  position: relative;
-}
-.divider::before {
-  content: '';
-  position: absolute; top: 0; bottom: 0; left: 50%; width: 5px; transform: translateX(-50%);
   background: var(--border);
 }
-.divider:hover::before, .divider:focus-visible::before { background: var(--accent); }
-.divider:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.divider:hover, .divider:focus-visible { background: var(--accent); }
+.divider:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 /* The brand is the page's <h1>; reset the UA heading size/margin to the original chrome look. */
 .brand { margin: 0; padding: 14px 16px; font-size: 14px; font-weight: 600; border-bottom: 1px solid var(--border); }
 .filter-wrap { position: relative; margin: 10px; }
