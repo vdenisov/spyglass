@@ -355,6 +355,17 @@
         },
         "responses": { "200": { "description": "ok" } }
       }
+    },
+    "/long-operation-id/deeply/nested/collection/document/{id}": {
+      "delete": {
+        "tags": ["Composed"],
+        "operationId": "com.example.api.billing.invoices.resource.InternalInvoiceLineItemResource.deleteInvoiceLineItemAttachments",
+        "summary": "Long operation ID with a deliberately long path (tail-match windowing)",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "204": { "description": "no content" } }
+      }
     }
   },
   "components": {

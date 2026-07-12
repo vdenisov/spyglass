@@ -29,7 +29,7 @@ class NavigationAE extends SpyglassSpecBase {
         open()
 
         then:
-        page.locator('.op-link').count() == 17
+        page.locator('.op-link').count() == 18
         page.locator('.tag-name').allTextContents() == ['Action items', 'Bodies', 'Composed', 'Legacy', 'Lookups', 'Polymorphic', 'Widgets']
     }
 
@@ -53,7 +53,7 @@ class NavigationAE extends SpyglassSpecBase {
 
         then: 'the loading hint is gone and the operations are listed'
         page.locator('.op-list .hint').count() == 0
-        page.locator('.op-link').count() == 17
+        page.locator('.op-link').count() == 18
     }
 
     def "filters live into field-named match sections, restoring tag groups when cleared"() {
@@ -180,9 +180,45 @@ class NavigationAE extends SpyglassSpecBase {
         page.locator('.match-name').allTextContents() == ['In operation ID']
         page.locator('.op-link').count() == 1
 
-        and: 'the full operationId is shown (not windowed) with the match highlighted'
+        and: 'the short operationId fits, so the whole id is shown (no windowing) with the match highlighted'
         page.locator('.op-snippet').textContent() == 'saveConfigEnvelope'
         page.locator('.op-snippet mark').textContent() == 'saveConfig'
+    }
+
+    def "windows a long operationId around a tail match so the marker stays visible when narrowed"() {
+        given: 'a match in the tail method-name fragment of a long fully-qualified operationId'
+        // The fixture op carrying this id (/long-operation-id/deeply/nested/collection/document/{id}) has a
+        // deliberately long path — and neither the path nor the summary contains 'attachments', so the token
+        // is unique to the operationId. The long path widens the row past the narrowed column, which is the
+        // precondition for the bug: the snippet spans the full (widened) row, so a naive width measurement
+        // over-budgets the window and lets the tail marker scroll off the right. It must budget by what's visible.
+        open()
+        page.locator('.filter').fill('attachments')
+
+        expect: 'bucketed under In operation ID (the token is unique to the operationId)'
+        page.locator('.match-name').allTextContents() == ['In operation ID']
+        page.locator('.op-link').count() == 1
+
+        when: 'the sidebar is narrowed so the long operationId no longer fits the column'
+        narrowSidebarToMinimum()
+
+        then: 'the snippet windows onto the match: a leading ellipsis with the head elided'
+        page.waitForFunction("() => { const s = document.querySelector('.op-snippet'); return !!s && s.textContent.startsWith('…'); }")
+
+        and: 'the found marker is fully within the visible list viewport — not clipped off the right edge'
+        page.locator('.op-snippet mark').textContent() == 'Attachments'
+        Map geom = page.evaluate('''() => {
+          const list = document.querySelector('.op-list');
+          const mark = document.querySelector('.op-snippet mark');
+          const cs = getComputedStyle(list);
+          const lb = list.getBoundingClientRect(), mb = mark.getBoundingClientRect();
+          const scrollbar = list.offsetWidth - list.clientWidth;
+          const visLeft = lb.left + parseFloat(cs.paddingLeft);
+          const visRight = lb.right - parseFloat(cs.paddingRight) - scrollbar;
+          return { markLeftInside: mb.left >= visLeft - 0.5, markRightInside: mb.right <= visRight + 0.5 };
+        }''') as Map
+        geom.markLeftInside == true
+        geom.markRightInside == true
     }
 
     def "deep-links to an operation via the URL hash"() {
