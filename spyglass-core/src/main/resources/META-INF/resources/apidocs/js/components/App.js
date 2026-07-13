@@ -1,6 +1,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import { CONFIG, storageKey, isSameOriginExtension, resolveUpdateCheckConfig, resolveRequestLogConfig, resolveBrandingConfig } from '../config.js'
+import { CONFIG, storageKey, isSameOriginExtension, resolveUpdateCheckConfig, resolveRequestLogConfig, resolveBrandingConfig, resolveShareLinkConfig } from '../config.js'
 import { loadSpec, collectOperations, specRawText, specEtag } from '../spec.js'
+import { decodeState, expandSharePayload, STATE_SEP } from '../shareLink.js'
 import { loadJson, saveJson, clearSaved, HEADERS_KEY, AUTH_TOKEN_KEY, SIDEBAR_WIDTH_KEY, ACCEPT_KEY } from '../storage.js'
 import { getValues, recordValue, removeValue, authKey } from '../history.js'
 import { registry, registerAuthPanel, registerHeaderPresets, registerHeaderLinkResolver, registerFooterItem, registerBodyTransformer, loadExtensions } from '../extensions.js'
@@ -157,6 +158,14 @@ export default {
     // config chain (see resolveBrandingConfig); extension-contributed footer items show regardless.
     const brandingShow = ref(true)
 
+    // Max length of a generated share link, resolved from the config seam in onMounted and handed to the
+    // OperationPanel's "Copy link". Default matches the config default for the pre-spec window.
+    const shareLinkMaxUrl = ref(4000)
+    // A pending shared deep-link to rehydrate into the current operation's form ({ opId, snap, seq }),
+    // set by applyDeepLinkState when a link is opened and consumed by the OperationPanel (once per seq).
+    const pendingDeepLink = ref(null)
+    let deepLinkSeq = 0
+
     // The seam context handed to each extension's register(api). It exposes the loaded spec (for the
     // extension to read its own x-* info extensions), the header bridge (add rows, read/set the
     // Authorization value, observe Clear-all), persistence/history helpers (so extensions don't import
@@ -194,7 +203,9 @@ export default {
       updateCheck.start({ config, specUrl: CONFIG.specUrl, loadedText: specRawText(), loadedEtag: specEtag() })
     }
 
-    // The URL hash is the source of truth for the current selection: #<METHOD>-<path>.
+    // The URL hash is the source of truth for the current selection: #<METHOD>-<path>. A shared
+    // deep-link (#24) appends the encoded request state after the anchor as "&s=<blob>" (STATE_SEP);
+    // that part is split off here and rehydrated separately, leaving the anchor parse unchanged.
     const anchorFor = (op) => `${op.method}-${op.path}`
     const select = (op) => { window.location.hash = anchorFor(op) }
     const applyHash = () => {
@@ -202,16 +213,47 @@ export default {
       if (!raw) { selected.value = null; return }
       let decoded
       try { decoded = decodeURIComponent(raw) } catch (e) { decoded = raw }
-      const i = decoded.indexOf('-')
-      const op = i < 0 ? null : operations.value.find(o => o.method === decoded.slice(0, i) && o.path === decoded.slice(i + 1))
+      const sepAt = decoded.indexOf(STATE_SEP)
+      const anchor = sepAt < 0 ? decoded : decoded.slice(0, sepAt)
+      const state = sepAt < 0 ? '' : decoded.slice(sepAt + STATE_SEP.length)
+      const i = anchor.indexOf('-')
+      const op = i < 0 ? null : operations.value.find(o => o.method === anchor.slice(0, i) && o.path === anchor.slice(i + 1))
       if (op) {
         selected.value = op
+        // The panel mounts from the anchor immediately; the encoded state (if any) is decoded off the
+        // render path and applied once it resolves — see applyDeepLinkState.
+        if (state) applyDeepLinkState(op, state)
         nextTick(() => { const el = document.querySelector('.op-link.active'); if (el) el.scrollIntoView({ block: 'nearest' }) })
       } else {
         // Invalid anchor: render nothing and erase it.
         selected.value = null
         history.replaceState(null, '', window.location.pathname + window.location.search)
       }
+    }
+
+    // Rehydrate a shared deep-link (the "&s=<blob>" fragment) into the just-selected operation: decode
+    // it, replace the global header set with the link's non-secret headers (preserving the recipient's
+    // own Authorization row, which the link never carries), and hand the form snapshot to the panel via
+    // pendingDeepLink (it rides the Request Log replay path — best-effort against the current schema).
+    // The consumed state is then stripped from the URL so a reload or later hashchange doesn't re-apply
+    // it over the recipient's edits. A malformed/truncated blob decodes to null and is ignored; the
+    // operation still opens from its anchor.
+    const applyDeepLinkState = async (op, encoded) => {
+      const payload = expandSharePayload(await decodeState(encoded))
+      if (payload) {
+        // Replace the header set with the link's, but keep the recipient's own Authorization row — the
+        // link never carried it, so replacing it would only blank their token.
+        const authRow = headers.value.find(h => (h.key || '').toLowerCase() === 'authorization')
+        const rows = payload.headers
+          .filter(h => h && h.key && (h.key || '').toLowerCase() !== 'authorization')
+          .map(h => headerRow({ key: h.key, value: h.value }))
+        if (authRow) rows.unshift(authRow)
+        headers.value = rows
+        pendingDeepLink.value = { opId: op.id, snap: payload.snap, seq: ++deepLinkSeq }
+      }
+      // Strip the consumed state from the address bar (leave the anchor), so a reload or later
+      // hashchange doesn't re-apply it. Best-effort — a rejected replaceState must not break rehydration.
+      try { history.replaceState(null, '', window.location.pathname + window.location.search + '#' + anchorFor(op)) } catch (e) { /* leave the URL as-is */ }
     }
 
     // The sidebar may not exceed half the viewport, and never shrinks below MIN_SIDEBAR.
@@ -325,6 +367,9 @@ export default {
         // Branding (config.js folds in the spec's x-spyglass-config.branding layer): whether the
         // built-in Spyglass footer mark renders. Resolved before applyHash, like the request log.
         brandingShow.value = resolveBrandingConfig(spec).show
+        // Share-link size cap (config.js folds in the spec's x-spyglass-config.shareLink layer), handed
+        // to the OperationPanel's Copy link. Resolved before applyHash, like the request log / branding.
+        shareLinkMaxUrl.value = resolveShareLinkConfig(spec).maxUrl
         // Front-end extensions: the operator's query/global list (resolved in config.js) is trusted and
         // wins. Otherwise the spec may advertise modules via the x-spyglass-extensions info extension —
         // but a spec is less trusted, so those are limited to same-origin (a cross-origin URL there
@@ -386,7 +431,7 @@ export default {
       authorizationValue, setAuthorization, authResetSeq,
       accept, acceptOptions, onAcceptInput,
       addHeader, removeHeader, select, startDrag, onDividerKey, fitSidebar, minSidebar: MIN_SIDEBAR, clearHeaders,
-      currentExec, recordExecution, requestLogUi, brandingShow,
+      currentExec, recordExecution, requestLogUi, brandingShow, shareLinkMaxUrl, pendingDeepLink,
       headerPresets: registry.headerPresets, authPanels: registry.authPanels, headerToAdd, addPreset,
       updateToastShow: updateCheck.show, onUpdateReload: updateCheck.reload, onUpdateDismiss: updateCheck.dismiss,
       helpShow, toggleHelp, closeHelp
@@ -447,7 +492,8 @@ export default {
         <div v-if="loading" class="status-msg" role="status">Loading spec…</div>
         <div v-else-if="error" class="status-msg error" role="alert">Failed to load spec: {{ error }}</div>
         <OperationPanel v-else-if="selected" :operation="selected" :exec-state="currentExec" :base-url="baseUrl" :headers="headers" :accept="accept" :on-executed="recordExecution"
-          :request-log-enabled="requestLogUi.enabled" :request-log-fold-n="requestLogUi.foldN" />
+          :request-log-enabled="requestLogUi.enabled" :request-log-fold-n="requestLogUi.foldN"
+          :share-link-max-url="shareLinkMaxUrl" :pending-deep-link="pendingDeepLink" />
         <div v-else class="status-msg" role="status">Select an operation from the left.</div>
       </main>
       <UpdateToast :show="updateToastShow" :title="title" @reload="onUpdateReload" @dismiss="onUpdateDismiss" />

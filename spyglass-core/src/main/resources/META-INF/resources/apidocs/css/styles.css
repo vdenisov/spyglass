@@ -696,7 +696,9 @@ h3 { margin: 18px 0 8px; font-size: 13px; }
 /* Two stacked rows: the execute action (Send/Cancel) and the form utilities (Copy/Reset). Reversed so
    the utilities render on top while Send stays first in DOM/tab order. */
 .send-bar { display: flex; flex-direction: column-reverse; gap: 14px; align-items: flex-start; margin: 20px 0; }
-.util-row { display: flex; gap: 10px; align-items: center; }
+.util-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+/* Copy-link refusal / clipboard message — drops to its own line under the utility buttons. */
+.share-error { color: var(--danger); font-size: 12px; flex-basis: 100%; }
 /* Send (and its in-flight Cancel sibling) with the shortcut caption stacked beneath. */
 .send-cta { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; }
 .send-row { display: inline-flex; align-items: center; gap: 8px; }

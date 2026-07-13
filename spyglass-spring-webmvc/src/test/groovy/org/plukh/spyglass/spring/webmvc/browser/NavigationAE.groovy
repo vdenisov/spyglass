@@ -29,7 +29,7 @@ class NavigationAE extends SpyglassSpecBase {
         open()
 
         then:
-        page.locator('.op-link').count() == 18
+        page.locator('.op-link').count() == 19
         page.locator('.tag-name').allTextContents() == ['Action items', 'Bodies', 'Composed', 'Legacy', 'Lookups', 'Polymorphic', 'Widgets']
     }
 
@@ -53,7 +53,7 @@ class NavigationAE extends SpyglassSpecBase {
 
         then: 'the loading hint is gone and the operations are listed'
         page.locator('.op-list .hint').count() == 0
-        page.locator('.op-link').count() == 18
+        page.locator('.op-link').count() == 19
     }
 
     def "filters live into field-named match sections, restoring tag groups when cleared"() {

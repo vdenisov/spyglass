@@ -366,9 +366,25 @@
         ],
         "responses": { "204": { "description": "no content" } }
       }
+    },
+    "/secure/{id}": {
+      "get": {
+        "tags": ["Widgets"],
+        "summary": "Fetch a secured resource (apiKey query parameter, deep-link exclusion)",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "api_key", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "region", "in": "query", "required": false, "schema": { "type": "string" } }
+        ],
+        "security": [{ "ApiKeyQuery": [] }],
+        "responses": { "200": { "description": "ok" } }
+      }
     }
   },
   "components": {
+    "securitySchemes": {
+      "ApiKeyQuery": { "type": "apiKey", "in": "query", "name": "api_key" }
+    },
     "schemas": {
       "CreateWidget": {
         "type": "object",
