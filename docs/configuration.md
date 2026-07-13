@@ -167,6 +167,35 @@ also accepts a **spec-supplied** layer via `x-spyglass-config.branding`. Precede
 </script>
 ```
 
+### Shareable request links
+
+Each operation's send bar has a **Copy link** control that encodes the filled-in request — selected
+operation, parameters, chosen body and `oneOf`/`anyOf` variant, and the non-secret global header rows —
+into the URL **fragment** (`#…`). The fragment is never sent to the server, so a shared link leaks
+nothing to the origin's logs; opening it rehydrates the form best-effort against the current schema
+(fields that no longer exist are dropped, newly-required ones surface as non-blocking warnings — the same
+path the Request Log's Replay uses). The query string (spec, `ns`, `ext`) is preserved on the link, so a
+recipient loads it against the same configuration.
+
+**Auth is never shared.** The `Authorization` header row and any field the spec maps to an `apiKey`
+security scheme (a header, query, or cookie key) are dropped *before* encoding — not merely hidden behind
+compression. Bearer/basic/oauth2/openIdConnect all ride the `Authorization` header and are excluded the
+same way. On load the link's header set **replaces** the recipient's, but the recipient's own
+`Authorization` row is preserved (the link never carried it), so a shared link can never blank a
+colleague's token.
+
+| Setting | Query param | `SPYGLASS_CONFIG` key | Default | Notes |
+| --- | --- | --- | --- | --- |
+| Max link length (chars) | `?shareLinkMaxUrl=` | `shareLink.maxUrl` | `4000` | Over this, Copy link refuses with a message instead of emitting a link too long to paste reliably (browsers accept far longer, but chat tools are the binding limit); cURL / `.http` remain for the oversized case. |
+
+The state is compressed with the platform `CompressionStream` (`deflate-raw`) and base64url-encoded — no
+new runtime dependency. The exact wire format is documented in
+[deep-link-format.md](deep-link-format.md) so other tooling can produce compatible links. Like the other
+settings, the cap also accepts a **spec-supplied** layer via `x-spyglass-config.shareLink`. Precedence,
+lowest to highest:
+
+**built-in default → spec `x-spyglass-config.shareLink` → `window.SPYGLASS_CONFIG.shareLink` → URL query parameter.**
+
 ## OpenAPI `info` extension catalog (`x-*`)
 
 The **mechanism** — emit/consume `x-*` keys on the document's `info` object — is part of the core. The
@@ -176,7 +205,7 @@ core consumes and emits two generic keys; other keys are populated by whatever e
 | --- | --- | --- | --- |
 | `x-service-name` | emitted | the core (`SpyglassOpenApiCustomizer`, from `spring.application.name`) | Informational service name. |
 | `x-spyglass-extensions` | **consumed** by core | whichever customizer supplies extensions (e.g. the demo's `DemoEndpointsConfiguration`, or an extension pack) | A list of ESM extension-module URLs to load. Spec-supplied entries are **same-origin only** (operator-supplied lists via `?ext=`/`SPYGLASS_CONFIG` are trusted anywhere). |
-| `x-spyglass-config` | **consumed** by core | whichever customizer supplies it (e.g. the demo sets the update-check interval) | A nested config object the front end folds **under** the operator layers (`SPYGLASS_CONFIG`/query win). Carries `updateCheck` — see [Update check](#update-check) — `requestLog` — see [Request Log](#request-log) — and `branding` — see [Branding](#branding). |
+| `x-spyglass-config` | **consumed** by core | whichever customizer supplies it (e.g. the demo sets the update-check interval) | A nested config object the front end folds **under** the operator layers (`SPYGLASS_CONFIG`/query win). Carries `updateCheck` — see [Update check](#update-check) — `requestLog` — see [Request Log](#request-log) — `branding` — see [Branding](#branding) — and `shareLink` — see [Shareable request links](#shareable-request-links). |
 
 An extension can populate further keys against the same mechanism — e.g. a mint-endpoint path or a
 deep-link config — read by its own front-end extension modules, not by the core.

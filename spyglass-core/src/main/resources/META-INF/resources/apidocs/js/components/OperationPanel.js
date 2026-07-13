@@ -1,9 +1,10 @@
 import { ref, computed, watch, nextTick, defineAsyncComponent, onMounted, onBeforeUnmount } from 'vue'
-import { makeNode, serializeNode, importValue, requestBodyMediaTypes, serializeMultipart, serializeUrlEncoded, getResponseSchemas, schemaTree, schemaExample, namedExamples, exampleToField, specRoot, collectBodyWarnings, OMIT } from '../spec.js'
+import { makeNode, serializeNode, importValue, requestBodyMediaTypes, serializeMultipart, serializeUrlEncoded, getResponseSchemas, schemaTree, schemaExample, namedExamples, exampleToField, specRoot, collectBodyWarnings, securityApiKeyFields, OMIT } from '../spec.js'
 import { mdBlock } from '../markdown.js'
 import { getValues, recordValue, removeValue, paramKey, bodyFieldKey } from '../history.js'
 import { loadForm, saveForm, removeForm } from '../opForm.js'
 import { copyText } from '../clipboard.js'
+import { encodeState, buildShareUrl, buildSharePayload } from '../shareLink.js'
 import { statusKind } from '../format.js'
 import { useFlash } from '../useFlash.js'
 import ParamInputs from './ParamInputs.js'
@@ -67,7 +68,14 @@ export default {
     // Request Log UI config (resolved in App from the config seam): whether to show the per-operation
     // Request Log panel below the response, and how many entries it shows before the "… +X more" fold.
     requestLogEnabled: { type: Boolean, default: true },
-    requestLogFoldN: { type: Number, default: 5 }
+    requestLogFoldN: { type: Number, default: 5 },
+    // Max length of a generated share link (resolved in App from the config seam); over it, Copy link
+    // refuses rather than emitting a link too long to paste reliably.
+    shareLinkMaxUrl: { type: Number, default: 4000 },
+    // A deep-link to rehydrate into this operation's form, set by App when a shared link is opened:
+    // { opId, snap, seq }. Applied (once per seq, only when opId matches the current operation) through
+    // the same replay path the Request Log uses. Null when no deep-link is pending.
+    pendingDeepLink: { type: Object, default: null }
   },
   setup(props) {
     const paramState = ref([])
@@ -78,6 +86,9 @@ export default {
     const useRaw = ref(false)
     const rawText = ref('')
     const rawError = ref('')
+    // Message shown beside the util-row when "Copy link" can't produce a shareable link (over the size
+    // cap, or clipboard blocked). Cleared on each attempt and whenever the operation is rebuilt.
+    const shareError = ref('')
     // `response` and `sending` live on the per-operation execState slice (so they survive switches);
     // expose read-only views so the template and shortcut handler are unchanged.
     const response = computed(() => props.execState.response)
@@ -225,6 +236,7 @@ export default {
     const rebuild = ({ fresh = false, snap: explicitSnap } = {}) => {
       const op = props.operation
       const snap = fresh ? null : (explicitSnap !== undefined ? explicitSnap : loadForm(op.id))
+      shareError.value = ''
       seeding = true
       paramState.value = op.parameters.map(p => {
         const c = controlFor(p.schema)
@@ -550,6 +562,18 @@ export default {
       rebuild({ snap: snapshot })
     }
 
+    // Apply a shared deep-link into this operation's form. App sets pendingDeepLink ({ opId, snap, seq })
+    // when a link is opened; it rides the same replay path (best-effort against the current schema). The
+    // seq guard applies each link at most once, and the opId guard ignores a link meant for a different
+    // operation — so navigating back to this operation later never re-seeds from a stale link. immediate
+    // so a link present at mount (the first-load case) is applied without waiting for a change.
+    let appliedDeepLinkSeq = -1
+    watch(() => props.pendingDeepLink, (dl) => {
+      if (!dl || dl.seq === appliedDeepLinkSeq || dl.opId !== props.operation.id) return
+      appliedDeepLinkSeq = dl.seq
+      replay(dl.snap)
+    }, { immediate: true })
+
     onBeforeUnmount(cancel)
     onBeforeUnmount(() => clearCancelTimer(props.execState))
     onBeforeUnmount(() => flushSave(props.operation))
@@ -644,11 +668,29 @@ export default {
       await copyToClipboard(text)
     }
 
+    // "Copy link": encode the filled-in form (params + body + media type + Form/Raw mode) and the
+    // non-secret global header rows into the URL fragment, and copy the resulting deep-link. Auth fields
+    // (the Authorization row and any apiKey-mapped field) are dropped before encoding, so nothing
+    // sensitive ends up in a shared URL (see shareLink.js). Over the configured size cap the link is
+    // refused with a message rather than copied — a partial link that silently dropped the body would be
+    // a worse surprise, and cURL / .http remain for the oversized case.
+    const copyShareLink = async () => {
+      shareError.value = ''
+      const payload = buildSharePayload(buildSnapshot(), props.headers, securityApiKeyFields())
+      const url = buildShareUrl(props.operation, await encodeState(payload))
+      if (url.length > props.shareLinkMaxUrl) {
+        shareError.value = `Request too large to share as a link (${url.length} chars, limit ${props.shareLinkMaxUrl}). Copy as cURL or use the .http export instead.`
+        return
+      }
+      if (await copyText(url)) flashCopied()
+      else shareError.value = 'Clipboard unavailable — the browser blocked the copy.'
+    }
+
     return {
       paramState, bodyTypes, mediaType, bodyMt, curKind, rebuildBody, bodyNode, bodySupported, useRaw, rawText, rawError, response, sending, cancel, copied, opIdCopied, copyOpId,
       tab, schemaView, requestRef, responseRefs, statusClass, editorSchema, mdBlock,
       requestExamples, reqCanPrefill, responseExamples, paramExampleGroups, hasAnyExamples, prefillRaw, prefillParam,
-      setRaw, prettyRaw, send, reset, copyCurl, copyHttp, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys,
+      setRaw, prettyRaw, send, reset, copyCurl, copyHttp, copyShareLink, shareError, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys,
       showCancel, replay, logReloadSeq
     }
   },
@@ -760,9 +802,12 @@ export default {
           <div class="util-row">
             <button class="btn-mini" type="button" @click="copyCurl">Copy as cURL</button>
             <button class="btn-mini" type="button" @click="copyHttp">Copy as JetBrains .http</button>
+            <button class="btn-mini btn-share-link" type="button" @click="copyShareLink"
+              v-tip="'Copy a shareable link that reopens this request in another browser. Auth/secret fields are excluded.'">Copy link</button>
             <button class="btn-mini danger btn-reset-op" type="button" @click="reset"
               v-tip="'Reset this operation — clear its inputs, saved form, and last response'">Reset</button>
             <span v-if="copied" class="copied-note" role="status">✓ Copied</span>
+            <span v-if="shareError" class="share-error" role="alert">{{ shareError }}</span>
           </div>
         </div>
 

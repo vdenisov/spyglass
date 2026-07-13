@@ -223,6 +223,50 @@ export function resolveBrandingConfig(spec) {
   }
 }
 
+// Shareable request deep-link configuration (see shareLink.js / OperationPanel.js): the "Copy link"
+// affordance encodes the filled-in request into the URL fragment. `maxUrl` caps the resulting link
+// length — over it, Copy link refuses with a message rather than emitting a link too long to paste
+// reliably into chat tools (browsers accept far longer, but shared-via-chat is the binding limit). A
+// host retunes it without editing the jar. Resolved separately from CONFIG, like the request log,
+// because its spec layer (x-spyglass-config.shareLink) isn't known until the spec loads; App.js calls
+// resolveShareLinkConfig after loadSpec and hands maxUrl to the OperationPanel.
+export const SHARE_LINK_DEFAULTS = { maxUrl: 4000 }
+
+// Flat query-param override: ?shareLinkMaxUrl=<chars>. Taken only when it parses to a positive integer;
+// unset, empty, zero, negative, fractional, or non-numeric values fall back to a lower-priority layer.
+function shareLinkFromParams() {
+  const out = {}
+  const raw = params.get('shareLinkMaxUrl')
+  if (raw != null) {
+    const n = Number(raw)
+    if (posInt(n)) out.maxUrl = n
+  }
+  return out
+}
+
+// Takes only the known share-link key from a config layer (defends against stray/wrong-typed fields),
+// mirroring pickRequestLog / pickBranding. maxUrl must be a positive integer.
+function pickShareLink(layer) {
+  if (!layer || typeof layer !== 'object') return {}
+  const out = {}
+  if (posInt(layer.maxUrl)) out.maxUrl = layer.maxUrl
+  return out
+}
+
+// Folds the share-link config layers, lowest priority first:
+//   defaults < spec info['x-spyglass-config'].shareLink < window.SPYGLASS_CONFIG.shareLink < query
+// Operator-supplied layers (global/query) win over the spec, mirroring the other resolvers.
+export function resolveShareLinkConfig(spec) {
+  const specConfig = spec && spec.info && spec.info['x-spyglass-config']
+  const specLayer = specConfig && typeof specConfig === 'object' ? specConfig.shareLink : null
+  return {
+    ...SHARE_LINK_DEFAULTS,
+    ...pickShareLink(specLayer),
+    ...pickShareLink(overrides.shareLink),
+    ...shareLinkFromParams()
+  }
+}
+
 // Whether a URL is same-origin: a relative path, or an absolute URL whose origin matches the page.
 // Used to gate two author-supplied-and-thus-less-trusted inputs against operator-supplied ones: the
 // ?spec= query param (above) and the spec's x-spyglass-extensions list — an absolute cross-origin URL

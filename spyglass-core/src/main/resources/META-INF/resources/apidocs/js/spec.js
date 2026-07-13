@@ -668,6 +668,25 @@ export function collectOperations() {
   return ops
 }
 
+// The apiKey security schemes the spec declares, grouped by the request location they populate, as the
+// concrete field names (header/query/cookie) they map to. Used to keep auth secrets out of a shared
+// deep-link (see shareLink.js #24): a param or header matching one of these is an auth field and is
+// dropped from the link. Header names are lowercased for case-insensitive matching (HTTP header names
+// are case-insensitive); query and cookie names are kept as-is (they are case-sensitive). Every declared
+// apiKey scheme is collected, whether or not an operation references it in its `security` block — an
+// apiKey field is a secret by definition, and a spec's security wiring can be incomplete. Bearer / basic
+// / oauth2 / openIdConnect all ride the Authorization header, which the deep-link excludes separately.
+export function securityApiKeyFields() {
+  const out = { header: new Set(), query: new Set(), cookie: new Set() }
+  const schemes = ROOT && ROOT.components && ROOT.components.securitySchemes
+  if (schemes) {
+    for (const s of Object.values(schemes)) {
+      if (s && s.type === 'apiKey' && s.name && out[s.in]) out[s.in].add(s.in === 'header' ? s.name.toLowerCase() : s.name)
+    }
+  }
+  return out
+}
+
 // The x-* vendor extensions of a spec node, as a plain object (empty when there are none). The core
 // never interprets these — they're carried through verbatim so an extension can read its own config
 // (see collectOperations and the response-body-transformer seam).
