@@ -102,6 +102,10 @@ export default {
     // also trigger the send-bar's shared copy note.
     const { flag: opIdCopied, flash: flashOpId } = useFlash()
     const tab = ref('try')
+    // Description clamping state: collapsed by default, ephemeral per operation visit
+    const descExpanded = ref(false)
+    const descOverflowing = ref(false)
+    const descRef = ref(null)
     const schemaView = ref('schema')
     // True while rebuild() is reseeding the form from a saved snapshot — suppresses the persist watcher
     // so seeding doesn't immediately re-save (and so a Reset isn't undone). Reset before the watcher's
@@ -291,9 +295,38 @@ export default {
       saveForm(op.id, buildSnapshot())
     }
 
+    // Check if description overflows 5-line clamp
+    const checkDescOverflow = () => {
+      if (!descRef.value) return
+      const lineHeight = parseFloat(getComputedStyle(descRef.value).lineHeight)
+      const maxHeight = lineHeight * 5
+      descOverflowing.value = descRef.value.scrollHeight > maxHeight
+    }
+
+    // Toggle description expansion
+    const toggleDesc = () => {
+      descExpanded.value = !descExpanded.value
+    }
+
     // On operation switch: persist the OUTGOING operation's form (the refs still hold its values here,
-    // before rebuild), then rebuild (which reseeds for the incoming operation).
-    watch(() => props.operation, (op, prevOp) => { flushSave(prevOp); rebuild() }, { immediate: true })
+    // before rebuild), then rebuild (which reseeds for the incoming operation). Also reset description
+    // clamping state (ephemeral per visit).
+    watch(() => props.operation, (op, prevOp) => {
+      flushSave(prevOp)
+      rebuild()
+      descExpanded.value = false
+      descOverflowing.value = false
+    }, { immediate: true })
+
+    // Re-check overflow when description content changes (after markdown render)
+    watch(() => props.operation.description, () => {
+      nextTick(checkDescOverflow)
+    })
+
+    // Check overflow when the description ref is mounted
+    watch(descRef, () => {
+      nextTick(checkDescOverflow)
+    })
 
     // Debounced persistence of same-operation edits, so a reload mid-editing keeps them. Skipped while
     // seeding; the captured opId guards against a switch landing the save under the wrong operation.
@@ -592,8 +625,16 @@ export default {
       e.stopPropagation()
       if (!sending.value) { tab.value = 'try'; send() }
     }
-    onMounted(() => document.addEventListener('keydown', onExecKey, true))
-    onBeforeUnmount(() => document.removeEventListener('keydown', onExecKey, true))
+    onMounted(() => {
+      document.addEventListener('keydown', onExecKey, true)
+      // Check description overflow after render and on resize
+      nextTick(checkDescOverflow)
+      window.addEventListener('resize', checkDescOverflow)
+    })
+    onBeforeUnmount(() => {
+      document.removeEventListener('keydown', onExecKey, true)
+      window.removeEventListener('resize', checkDescOverflow)
+    })
 
     // Roving-focus arrow navigation for a tablist (Try/Schema, Form/Raw, Schema/Examples). ←/→ wrap
     // between the enabled tabs, Home/End jump to the ends; the moved-to tab is focused and activated
@@ -691,7 +732,7 @@ export default {
       tab, schemaView, requestRef, responseRefs, statusClass, editorSchema, mdBlock,
       requestExamples, reqCanPrefill, responseExamples, paramExampleGroups, hasAnyExamples, prefillRaw, prefillParam,
       setRaw, prettyRaw, send, reset, copyCurl, copyHttp, copyShareLink, shareError, paramHistory, bodyHist, forgetParam, bodyForget, downloadName, warnings, fmtWarnPath, sendHint, onTabKeys,
-      showCancel, replay, logReloadSeq
+      showCancel, replay, logReloadSeq, descExpanded, descOverflowing, descRef, toggleDesc, checkDescOverflow
     }
   },
   template: `
@@ -715,7 +756,24 @@ export default {
       </div>
       <h2 v-if="operation.summary" class="op-summary">{{ operation.summary }}</h2>
       <div v-if="operation.deprecated" class="deprecated-banner">⚠ This operation is deprecated.</div>
-      <div v-if="operation.description" class="op-desc" v-html="mdBlock(operation.description)"></div>
+      <div v-if="operation.description" class="op-desc-wrapper">
+        <div
+          ref="descRef"
+          class="op-desc"
+          :class="{ 'op-desc-clamped': !descExpanded && descOverflowing }"
+          v-html="mdBlock(operation.description)"
+          @click="!descExpanded && descOverflowing && toggleDesc()"
+        ></div>
+        <button
+          v-if="descOverflowing"
+          type="button"
+          class="op-desc-toggle"
+          :aria-expanded="descExpanded"
+          @click="toggleDesc"
+        >
+          {{ descExpanded ? 'Show less' : '… more' }}
+        </button>
+      </div>
       <p v-if="operation.externalDocs && operation.externalDocs.url" class="op-extdocs">
         <a :href="operation.externalDocs.url" target="_blank" rel="noopener">{{ operation.externalDocs.description || 'External documentation' }} ↗</a>
       </p>
