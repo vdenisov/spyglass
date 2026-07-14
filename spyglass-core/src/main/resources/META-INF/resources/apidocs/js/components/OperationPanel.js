@@ -308,6 +308,20 @@ export default {
       descExpanded.value = !descExpanded.value
     }
 
+    // Re-run the overflow check on any width change that can shift the line count — not just a window
+    // resize, but also the sidebar/main divider drag, which fires no window resize event at all (same
+    // reason Sidebar.js's snippet-column remeasure uses a ResizeObserver instead of window 'resize').
+    // Falls back to a window resize listener only where ResizeObserver isn't available.
+    const hasResizeObserver = typeof window !== 'undefined' && 'ResizeObserver' in window
+    let descRO = null
+    const observeDescResize = (el) => {
+      if (descRO) { descRO.disconnect(); descRO = null }
+      if (el && hasResizeObserver) {
+        descRO = new ResizeObserver(() => checkDescOverflow())
+        descRO.observe(el)
+      }
+    }
+
     // On operation switch: persist the OUTGOING operation's form (the refs still hold its values here,
     // before rebuild), then rebuild (which reseeds for the incoming operation). Also reset description
     // clamping state (ephemeral per visit).
@@ -323,8 +337,11 @@ export default {
       nextTick(checkDescOverflow)
     })
 
-    // Check overflow when the description ref is mounted
-    watch(descRef, () => {
+    // Check overflow when the description ref is mounted, and (re)point the ResizeObserver at the new
+    // element — the div unmounts/remounts across operations that toggle between having and not having
+    // a description, so the observer target has to follow it.
+    watch(descRef, (el) => {
+      observeDescResize(el)
       nextTick(checkDescOverflow)
     })
 
@@ -627,13 +644,17 @@ export default {
     }
     onMounted(() => {
       document.addEventListener('keydown', onExecKey, true)
-      // Check description overflow after render and on resize
+      // Check description overflow after initial render, and keep it accurate afterwards. The
+      // ResizeObserver (attached via the descRef watcher) covers window resizes too, since a window
+      // resize that changes the panel's width also changes the observed element's box size — it's
+      // wired here only as a fallback for browsers without ResizeObserver.
       nextTick(checkDescOverflow)
-      window.addEventListener('resize', checkDescOverflow)
+      if (!hasResizeObserver) window.addEventListener('resize', checkDescOverflow)
     })
     onBeforeUnmount(() => {
       document.removeEventListener('keydown', onExecKey, true)
-      window.removeEventListener('resize', checkDescOverflow)
+      if (descRO) { descRO.disconnect(); descRO = null }
+      if (!hasResizeObserver) window.removeEventListener('resize', checkDescOverflow)
     })
 
     // Roving-focus arrow navigation for a tablist (Try/Schema, Form/Raw, Schema/Examples). ←/→ wrap
