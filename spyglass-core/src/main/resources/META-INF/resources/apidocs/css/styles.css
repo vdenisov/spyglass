@@ -34,6 +34,9 @@
   /* Stacking scale: dropdowns/lists below viewport-fixed tooltips. (CodeMirror injects its own
      higher z-index for editor tooltips, which sit above both.) */
   --z-dropdown: 50;
+  --z-sticky-send: 40;  /* narrow-layout sticky Send bar: above page content, below the drawer scrim */
+  --z-scrim: 500;    /* narrow-layout drawer scrim: above page content, below tooltips/toast/modal */
+  --z-drawer: 510;   /* the off-canvas operation drawer, just above its own scrim */
   --z-tooltip: 1000;
   --z-toast: 1100;   /* the update toast sits above tooltips so its Reload/Dismiss stay clickable */
   --z-modal: 1200;   /* modal dialogs (KeyboardHelp) sit above everything, including the toast */
@@ -992,4 +995,150 @@ h3 { margin: 18px 0 8px; font-size: 13px; }
     transition-duration: .01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ============================================================================
+   Responsive / narrow viewport (mobile). Below the breakpoint the two-column
+   shell collapses to a single column and the operation sidebar becomes an
+   off-canvas drawer. Every rule keys off `.layout.narrow`, so the desktop
+   layout above the breakpoint is untouched (byte-identical DOM + CSS). Keep the
+   768px literal in sync with NARROW_QUERY in js/components/App.js — matchMedia
+   there stops emitting the sidebar's inline flex/width below the breakpoint, so
+   the drawer's CSS width below can win (an inline width would otherwise beat
+   these class rules). The slide/fade transitions are auto-disabled by the
+   prefers-reduced-motion block above. */
+
+/* The stacked-header trigger and the in-drawer close ✕ exist only on the narrow
+   layout (v-if / the `drawer` prop), and are revealed by the media block below. */
+.drawer-trigger {
+  display: none;
+  box-sizing: border-box; width: 100%; min-height: 44px;
+  align-items: center; gap: 10px;
+  padding: 8px 16px; border: none; border-bottom: 1px solid var(--border);
+  background: var(--bg-alt); color: var(--text); cursor: pointer; text-align: left;
+}
+.drawer-trigger:hover { background: var(--accent-weak); }
+.drawer-trigger-icon { font-size: 16px; line-height: 1; color: var(--muted); }
+.drawer-trigger-method { flex: 0 0 auto; font-size: 11px; padding: 2px 8px; }
+.drawer-trigger-label {
+  font-family: var(--mono); font-size: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.drawer-close {
+  display: none; position: absolute; top: 6px; right: 6px; z-index: 1;
+  min-width: 44px; min-height: 44px; padding: 8px;
+  border: none; background: none; cursor: pointer; color: var(--muted);
+  font-size: 15px; line-height: 1; border-radius: 6px;
+}
+.drawer-close:hover { color: var(--text); background: var(--accent-weak); }
+
+@media (max-width: 768px) {
+  /* Single column, page-scroll: dropping the flex row and the 100vh height lets
+     the window/body scroll — avoids nested scroll containers and the mobile
+     URL-bar 100vh trap, and makes .op-panel scrollIntoView move the page. */
+  .layout.narrow { display: block; height: auto; }
+  .layout.narrow .main { flex: none; overflow: visible; }
+
+  /* No resizer in single-column (also drops its tabindex=0 from the tab order). */
+  .layout.narrow .divider { display: none; }
+
+  /* Sidebar → off-canvas drawer. position:fixed also anchors the absolutely
+     positioned .drawer-close. Width wins because the inline flex/width is not
+     emitted while narrow (App.js sidebarStyle). */
+  .layout.narrow .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: min(85vw, 360px); z-index: var(--z-drawer);
+    transform: translateX(-100%); transition: transform .2s ease;
+    box-shadow: 2px 0 16px rgba(0, 0, 0, .3);
+  }
+  .layout.narrow.drawer-open .sidebar { transform: none; }
+  .layout.narrow .sidebar .brand { padding-right: 52px; }  /* room for the ✕ */
+  .layout.narrow .drawer-close { display: block; }
+  .layout.narrow .drawer-trigger { display: flex; }
+
+  /* Scrim behind the open drawer. */
+  .layout.narrow .drawer-scrim {
+    position: fixed; inset: 0; z-index: var(--z-scrim);
+    background: rgba(0, 0, 0, .4);
+    opacity: 0; pointer-events: none; transition: opacity .2s ease;
+  }
+  .layout.narrow .drawer-scrim.open { opacity: 1; pointer-events: auto; }
+
+  /* Overflow / min-width safety: the desktop fixed widths blow out a ~390px
+     viewport, so relax them to fill the single column. (The topbar itself
+     already stacks — its existing container query fires once the main pane is
+     full-width.) */
+  .layout.narrow .base-url input { min-width: 0; width: 100%; box-sizing: border-box; }
+  .layout.narrow .accept-field .combobox,
+  .layout.narrow .accept-field .combobox-input { width: 100%; }
+  .layout.narrow .headers-editor { max-width: none; }
+  /* Extra bottom padding clears the fixed Send bar so the last request-log / response content isn't
+     permanently hidden behind it. */
+  .layout.narrow .op-panel { max-width: none; padding: 14px 14px 84px; }
+
+  /* Request-settings disclosure: a full-width toggle in the stacked header that surfaces the (always
+     read-only, same-origin) base URL as its glanceable summary and expands to reveal Accept + headers.
+     Typography follows the app's field chrome — an 11px muted key over the mono value — rather than a
+     heading, and the chevron rotates to signal expandability. Rendered only on narrow (v-if). */
+  .layout.narrow .settings-toggle {
+    display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px;
+    padding: 6px 4px; border: none; background: none; cursor: pointer; text-align: left;
+  }
+  .layout.narrow .settings-toggle-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+  .layout.narrow .settings-toggle-key { font-size: 11px; font-weight: 600; color: var(--muted); }
+  .layout.narrow .settings-toggle-val {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* Same CSS-drawn triangle the comboboxes use (the ▾ glyph renders too small) so the disclosure's
+     affordance matches the dropdown carets; it rotates to point up when the section is open. */
+  .layout.narrow .settings-toggle-caret {
+    flex: 0 0 auto; width: 16px; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); transition: transform .15s ease;
+  }
+  .layout.narrow .settings-toggle-caret::after {
+    content: ''; width: 0; height: 0;
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-top: 5px solid currentColor;
+  }
+  .layout.narrow .settings-toggle.open .settings-toggle-caret { transform: rotate(180deg); }
+  /* The base URL is surfaced in the disclosure summary above, so hide the in-block field on narrow. */
+  .layout.narrow .base-url { display: none; }
+
+  /* Sticky Send: pull the execute action out of the in-flow send bar and pin it to the bottom of the
+     viewport so it's reachable from anywhere in a long request form. The form utilities (Copy/Reset)
+     stay in flow. Full-width buttons for a comfortable tap target; the keyboard hint is dropped. The
+     safe-area inset keeps it above the iOS home indicator. */
+  .layout.narrow .send-cta {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-sticky-send);
+    flex-direction: row; align-items: stretch; gap: 10px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: var(--bg); border-top: 1px solid var(--border);
+  }
+  .layout.narrow .send-cta .send-row { flex: 1; }
+  .layout.narrow .send-cta .btn-send, .layout.narrow .send-cta .btn-cancel { flex: 1; }
+  .layout.narrow .send-cta .kbd-hint { display: none; }
+
+  /* Form fields: the desktop row is a fixed 200px label + a reserved include-checkbox gutter beside a
+     >=240px control — together they overflow a phone column. Reflow to two lines: the label (with its
+     optional include checkbox right after it) on the first, the value control full-width flush-left on
+     the second. Letting the include size to its content collapses the empty gutter on required rows, so
+     required and optional inputs both align to the left edge. The desktop min-width:240 floor is what
+     sized the (inline-flex, content-sized) combobox, so we make the combobox/select grow and the input
+     fill it instead (mirrors the .map-value pattern) rather than just dropping the floor. */
+  .layout.narrow .field-row { flex-wrap: wrap; align-items: center; }
+  .layout.narrow .field-label { flex: 0 1 auto; }
+  .layout.narrow .field-include { flex: 0 0 auto; }
+  .layout.narrow .control { flex-basis: 100%; }
+  .layout.narrow .control > .combobox,
+  .layout.narrow .control > select { flex: 1; min-width: 0; }
+  .layout.narrow .control .combobox-input { min-width: 0; width: 100%; }
+
+  /* Keep the response raw/pretty + copy/download controls reachable — wrap
+     rather than overflow off-screen (.response pre is already overflow-x:auto). */
+  .layout.narrow .resp-toolbar { flex-wrap: wrap; }
+
+  /* ~44px tap targets on the interactive rows/controls. */
+  .layout.narrow .op-link { min-height: 44px; }
+  .layout.narrow .filter { padding-top: 10px; padding-bottom: 10px; }
 }

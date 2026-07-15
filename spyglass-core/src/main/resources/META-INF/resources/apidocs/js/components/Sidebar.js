@@ -89,9 +89,12 @@ export default {
     selectedId: { type: String, default: '' },
     title: { type: String, default: 'API' },
     loading: { type: Boolean, default: false },
-    brandingShow: { type: Boolean, default: true }
+    brandingShow: { type: Boolean, default: true },
+    // On the narrow layout the sidebar is rendered as an off-canvas drawer; this reveals an in-panel
+    // close control (the ✕ in the brand row). Default false keeps the desktop DOM unchanged.
+    drawer: { type: Boolean, default: false }
   },
-  emits: ['select'],
+  emits: ['select', 'close'],
   setup(props, { emit }) {
     const filter = ref('')
     const filterInput = ref(null)
@@ -322,6 +325,8 @@ export default {
   template: `
     <aside class="sidebar" ref="rootEl" @focusin="onFocusin" @focusout="onFocusout" @mousedown="onSidebarMousedown">
       <h1 class="brand">{{ title }}</h1>
+      <button v-if="drawer" type="button" class="drawer-close" @click="$emit('close')"
+        aria-label="Close operation list" v-tip="'Close (Esc)'"><span aria-hidden="true">✕</span></button>
       <div class="filter-wrap">
         <input class="filter" ref="filterInput" v-model="filter" @keydown="onFilterKeydown"
           aria-label="Filter operations" placeholder="Filter operations…  ( / )" />

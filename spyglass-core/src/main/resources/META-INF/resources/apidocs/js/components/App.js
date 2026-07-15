@@ -15,6 +15,15 @@ import KeyboardHelp from './KeyboardHelp.js'
 
 const MIN_SIDEBAR = 240
 
+// Below this viewport width the two-column layout collapses to a single column and the operation
+// sidebar becomes an off-canvas drawer. Keep this literal in sync with the `@media (max-width: 768px)`
+// block in css/styles.css — the JS (matchMedia) and CSS breakpoints must not drift.
+const NARROW_QUERY = '(max-width: 768px)'
+
+// Elements that take part in the Tab order — the drawer focus trap keeps Tab/Shift+Tab cycling among
+// these while the drawer is open. Mirrors Modal.js's FOCUSABLE (same behaviour, off-canvas panel).
+const DRAWER_FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 // Root component: loads the spec, owns the base-URL and global headers, and shows the selected operation.
 // Consumer-specific UI (an Authorization-header generator, header presets) is contributed by
 // front-end extensions through the seam (see extensions.js); the core ships none of it.
@@ -70,6 +79,31 @@ export default {
     // A stored sidebar width wins over the measured default (applied/clamped in onMounted).
     const storedWidth = loadJson(localStorage, SIDEBAR_WIDTH_KEY, null)
     const sidebarWidth = ref(typeof storedWidth === 'number' ? storedWidth : 320)
+
+    // Responsive layout. `isNarrow` tracks the single breakpoint (matchMedia); below it the shell is a
+    // single column and the sidebar is an off-canvas drawer. The persisted sidebar width is applied only
+    // on the wide layout — sidebarStyle returns null when narrow so the inline flex/width (which would
+    // otherwise beat the drawer's CSS width, inline specificity) is simply not emitted, and no stale wide
+    // width leaks into single-column.
+    const mq = window.matchMedia(NARROW_QUERY)
+    const isNarrow = ref(mq.matches)
+    const onNarrowChange = (e) => { isNarrow.value = e.matches }
+    const sidebarStyle = computed(() =>
+      isNarrow.value ? null : { flex: '0 0 ' + sidebarWidth.value + 'px', width: sidebarWidth.value + 'px' })
+
+    // Drawer open state (narrow only). Resizing/rotating back to the wide layout force-closes it so a
+    // fixed drawer can never be left stuck open.
+    const drawerOpen = ref(false)
+    const openDrawer = () => { drawerOpen.value = true }
+    const closeDrawer = () => { drawerOpen.value = false }
+    watch(isNarrow, (n) => { if (!n) drawerOpen.value = false })
+
+    // The request-settings block (base URL / Accept / headers / extension auth panels) is execute-only
+    // tooling; on the narrow layout it collapses behind a disclosure (closed by default) so the reader
+    // lands on the operation, not a tall settings stack. On the wide layout it is always shown (the
+    // toggle isn't rendered), so this ref is inert there.
+    const settingsOpen = ref(false)
+    const toggleSettings = () => { settingsOpen.value = !settingsOpen.value }
     // Bumped on "Clear" (exposed as api.headers.resetSignal) so an extension's auth panel resets its
     // own form state.
     const authResetSeq = ref(0)
@@ -165,6 +199,9 @@ export default {
     // set by applyDeepLinkState when a link is opened and consumed by the OperationPanel (once per seq).
     const pendingDeepLink = ref(null)
     let deepLinkSeq = 0
+    // Set by a narrow-layout drawer selection so applyHash scrolls the newly-mounted panel into view
+    // once (the panel sits below the collapsed header in the single-column stack). See onSidebarSelect.
+    let scrollPanelAfterSelect = false
 
     // The seam context handed to each extension's register(api). It exposes the loaded spec (for the
     // extension to read its own x-* info extensions), the header bridge (add rows, read/set the
@@ -224,6 +261,11 @@ export default {
         // render path and applied once it resolves — see applyDeepLinkState.
         if (state) applyDeepLinkState(op, state)
         nextTick(() => { const el = document.querySelector('.op-link.active'); if (el) el.scrollIntoView({ block: 'nearest' }) })
+        // Narrow layout: a drawer selection asked to bring the panel into view once it mounted.
+        if (scrollPanelAfterSelect) {
+          scrollPanelAfterSelect = false
+          nextTick(() => { const p = document.querySelector('.op-panel'); if (p) p.scrollIntoView({ block: 'start' }) })
+        }
       } else {
         // Invalid anchor: render nothing and erase it.
         selected.value = null
@@ -307,8 +349,11 @@ export default {
     const fitSidebar = () => measureSidebar()
 
     // Re-clamp the sidebar against the new viewport (the cap is half the width). Named so it — and the
-    // hashchange handler — can be removed on unmount rather than leaking past the component's life.
-    const onResize = () => { sidebarWidth.value = clampWidth(sidebarWidth.value) }
+    // hashchange handler — can be removed on unmount rather than leaking past the component's life. Also
+    // reconcile isNarrow from the live media query: matchMedia's own `change` event isn't always
+    // delivered for every programmatic viewport change (headless Chromium under test, some embedded
+    // webviews), so treating a plain `resize` as authoritative keeps the breakpoint state self-healing.
+    const onResize = () => { sidebarWidth.value = clampWidth(sidebarWidth.value); isNarrow.value = mq.matches }
 
     // Keyboard resize for the focusable divider (role=separator): arrows nudge (Shift = coarser),
     // Home/End jump to the min/max, "f" fits to the widest row. Mirrors the drag, clamped the same way.
@@ -353,6 +398,66 @@ export default {
       toggleHelp()
     }
 
+    // Sidebar selection. Drives the normal hash-based `select`; on the narrow layout it also closes the
+    // drawer and (via applyHash's scrollPanelAfterSelect) scrolls the panel into view. On the wide layout
+    // isNarrow is false, so this is byte-identical to binding `select` directly — desktop selection must
+    // not close anything.
+    const onSidebarSelect = (op) => {
+      const already = selected.value && selected.value.id === op.id
+      select(op)
+      if (isNarrow.value) {
+        closeDrawer()
+        // Re-tapping the already-open op fires no hashchange (hash unchanged) so applyHash won't run —
+        // scroll now. Otherwise let applyHash scroll once the newly-selected op's panel mounts.
+        if (already) nextTick(() => { const p = document.querySelector('.op-panel'); if (p) p.scrollIntoView({ block: 'start' }) })
+        else scrollPanelAfterSelect = true
+      }
+    }
+
+    // Drawer focus trap (narrow layout only). Mirrors Modal.js's pattern, but the drawer reuses the
+    // Sidebar DOM rather than the Modal component (Modal's centered-card CSS is wrong for an off-canvas
+    // panel), so the trap is re-implemented here and active only while the drawer is open. Capture phase
+    // so Escape closes the drawer before the sidebar's own Escape (list -> filter) — only differs while
+    // narrow; desktop is untouched.
+    let drawerLastFocused = null
+    let drawerSavedOverflow = ''
+    const onDrawerKeydown = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); closeDrawer(); return }
+      if (e.key !== 'Tab') return
+      const el = document.querySelector('.sidebar')
+      const els = el ? Array.from(el.querySelectorAll(DRAWER_FOCUSABLE)) : []
+      if (!els.length) { e.preventDefault(); return }
+      const first = els[0]
+      const last = els[els.length - 1]
+      const active = document.activeElement
+      const outside = !el || !el.contains(active)
+      if (e.shiftKey) {
+        if (outside || active === first) { e.preventDefault(); last.focus() }
+      } else {
+        if (outside || active === last) { e.preventDefault(); first.focus() }
+      }
+    }
+    const teardownDrawerTrap = () => {
+      document.removeEventListener('keydown', onDrawerKeydown, true)
+      document.body.style.overflow = drawerSavedOverflow
+      // preventScroll: on the narrow single-column layout, restoring focus to the trigger (top of page)
+      // would otherwise scroll it into view and fight the select→scroll-panel-into-view behaviour.
+      if (drawerLastFocused && typeof drawerLastFocused.focus === 'function' && document.contains(drawerLastFocused)) drawerLastFocused.focus({ preventScroll: true })
+      drawerLastFocused = null
+    }
+    watch(drawerOpen, (open) => {
+      if (open) {
+        drawerLastFocused = document.activeElement
+        document.addEventListener('keydown', onDrawerKeydown, true)
+        drawerSavedOverflow = document.body.style.overflow
+        document.body.style.overflow = 'hidden'
+        // Focus the filter so typing narrows immediately and the trap has an in-drawer anchor.
+        nextTick(() => { const f = document.querySelector('.sidebar .filter'); if (f) f.focus() })
+      } else {
+        teardownDrawerTrap()
+      }
+    })
+
     onMounted(async () => {
       try {
         const spec = await loadSpec(CONFIG.specUrl)
@@ -381,8 +486,10 @@ export default {
           : (Array.isArray(specExtensions) ? specExtensions.filter(isSameOriginExtension) : [])
         await loadExtensions(buildExtensionApi(spec), extensions)
         await nextTick()
-        // A persisted width wins; otherwise fall back to the measured (widest-row) default.
-        if (storedWidth == null) measureSidebar()
+        // A persisted width wins; otherwise fall back to the measured (widest-row) default. Skip the
+        // measurement on the narrow layout — it transiently sizes the sidebar to 10000px, which is
+        // meaningless (and would flash a scrollbar) against an off-canvas drawer.
+        if (!isNarrow.value && storedWidth == null) measureSidebar()
         else sidebarWidth.value = clampWidth(sidebarWidth.value)
         applyHash()
         startUpdateCheck(spec)
@@ -394,11 +501,15 @@ export default {
       window.addEventListener('hashchange', applyHash)
       window.addEventListener('resize', onResize)
       document.addEventListener('keydown', onHelpKey)
+      mq.addEventListener('change', onNarrowChange)
     })
     onBeforeUnmount(() => {
       window.removeEventListener('hashchange', applyHash)
       window.removeEventListener('resize', onResize)
       document.removeEventListener('keydown', onHelpKey)
+      mq.removeEventListener('change', onNarrowChange)
+      // If unmounted while the drawer is open, undo its document-level effects (keydown trap, scroll lock).
+      if (drawerOpen.value) teardownDrawerTrap()
     })
 
     // Persist request state on change. Authorization value → sessionStorage (short-lived token);
@@ -430,7 +541,8 @@ export default {
       loading, error, title, operations, selected, baseUrl, headers, sidebarWidth,
       authorizationValue, setAuthorization, authResetSeq,
       accept, acceptOptions, onAcceptInput,
-      addHeader, removeHeader, select, startDrag, onDividerKey, fitSidebar, minSidebar: MIN_SIDEBAR, clearHeaders,
+      addHeader, removeHeader, select, onSidebarSelect, startDrag, onDividerKey, fitSidebar, minSidebar: MIN_SIDEBAR, clearHeaders,
+      isNarrow, drawerOpen, openDrawer, closeDrawer, sidebarStyle, settingsOpen, toggleSettings,
       currentExec, recordExecution, requestLogUi, brandingShow, shareLinkMaxUrl, pendingDeepLink,
       headerPresets: registry.headerPresets, authPanels: registry.authPanels, headerToAdd, addPreset,
       updateToastShow: updateCheck.show, onUpdateReload: updateCheck.reload, onUpdateDismiss: updateCheck.dismiss,
@@ -438,14 +550,22 @@ export default {
     }
   },
   template: `
-    <div class="layout">
-      <Sidebar :operations="operations" :selected-id="selected ? selected.id : ''" :title="title" :loading="loading" :branding-show="brandingShow" @select="select"
-        :style="{ flex: '0 0 ' + sidebarWidth + 'px', width: sidebarWidth + 'px' }" />
+    <div class="layout" :class="{ narrow: isNarrow, 'drawer-open': drawerOpen }">
+      <Sidebar :operations="operations" :selected-id="selected ? selected.id : ''" :title="title" :loading="loading" :branding-show="brandingShow" @select="onSidebarSelect"
+        :drawer="isNarrow" @close="closeDrawer" :style="sidebarStyle"
+        id="op-drawer" :role="isNarrow && drawerOpen ? 'dialog' : null" :aria-modal="isNarrow && drawerOpen ? 'true' : null" :aria-label="isNarrow ? 'Operations' : null" />
       <div class="divider" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"
         :aria-valuenow="Math.round(sidebarWidth)" :aria-valuemin="minSidebar" tabindex="0"
         @mousedown.prevent="startDrag" @dblclick.prevent="fitSidebar" @keydown="onDividerKey"
         v-tip.cursor="'Drag to resize; double-click to fit. When focused: ←/→ resize, Home/End min/max, f to fit.'"></div>
       <main class="main">
+        <button v-if="isNarrow" type="button" class="drawer-trigger" @click="openDrawer"
+          aria-haspopup="dialog" :aria-expanded="drawerOpen ? 'true' : 'false'" aria-controls="op-drawer"
+          v-tip="'Browse operations'">
+          <span class="drawer-trigger-icon" aria-hidden="true">☰</span>
+          <span v-if="selected" class="method drawer-trigger-method" :class="'m-' + selected.method.toLowerCase()">{{ selected.method }}</span>
+          <span class="drawer-trigger-label">{{ selected ? selected.path : 'Select an operation' }}</span>
+        </button>
         <div class="topbar-wrap">
         <div class="topbar">
           <div class="topbar-actions">
@@ -455,7 +575,16 @@ export default {
             <button class="btn-help" type="button" @click="toggleHelp" aria-label="Keyboard shortcuts"
               aria-haspopup="dialog" :aria-expanded="helpShow ? 'true' : 'false'" v-tip="'Keyboard shortcuts (?)'"><span aria-hidden="true">?</span></button>
           </div>
-          <div class="topbar-main">
+          <button v-if="isNarrow" type="button" class="settings-toggle" :class="{ open: settingsOpen }"
+            @click="toggleSettings" :aria-expanded="settingsOpen ? 'true' : 'false'" aria-controls="request-settings"
+            aria-label="Request settings (base URL, Accept, headers)">
+            <span class="settings-toggle-body">
+              <span class="settings-toggle-key">Base URL</span>
+              <span class="settings-toggle-val">{{ baseUrl }}</span>
+            </span>
+            <span class="settings-toggle-caret" aria-hidden="true"></span>
+          </button>
+          <div class="topbar-main" id="request-settings" v-show="!isNarrow || settingsOpen">
           <div class="topbar-left">
             <label class="base-url">
               <span>Base URL</span>
@@ -494,8 +623,9 @@ export default {
         <OperationPanel v-else-if="selected" :operation="selected" :exec-state="currentExec" :base-url="baseUrl" :headers="headers" :accept="accept" :on-executed="recordExecution"
           :request-log-enabled="requestLogUi.enabled" :request-log-fold-n="requestLogUi.foldN"
           :share-link-max-url="shareLinkMaxUrl" :pending-deep-link="pendingDeepLink" />
-        <div v-else class="status-msg" role="status">Select an operation from the left.</div>
+        <div v-else class="status-msg" role="status">{{ isNarrow ? 'Select an operation to begin — tap ☰ above to browse.' : 'Select an operation from the left.' }}</div>
       </main>
+      <div v-if="isNarrow" class="drawer-scrim" :class="{ open: drawerOpen }" @click="closeDrawer"></div>
       <UpdateToast :show="updateToastShow" :title="title" @reload="onUpdateReload" @dismiss="onUpdateDismiss" />
       <KeyboardHelp :show="helpShow" @close="closeHelp" />
     </div>
