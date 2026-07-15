@@ -63,11 +63,20 @@ abstract class ManagementPortIsolationSpecBase extends Specification {
     // (e.g. `redirectsToEntry(...)`) isn't found via dynamic dispatch on the concrete subclass instance.
     protected boolean redirectsToEntry(int p, String path) {
         def conn = get(p, path)
-        conn.responseCode == 302 && conn.getHeaderField('Location').endsWith('/apidocs/index.html')
+        try {
+            conn.responseCode == 302 && conn.getHeaderField('Location').endsWith('/apidocs/index.html')
+        } finally {
+            conn.disconnect()
+        }
     }
 
     protected int code(int p, String path) {
-        get(p, path).responseCode
+        def conn = get(p, path)
+        try {
+            conn.responseCode
+        } finally {
+            conn.disconnect()
+        }
     }
 
     protected HttpURLConnection get(int p, String path) {
