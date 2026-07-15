@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.info.BuildProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
 /**
  * Stack-neutral Spring wiring for Spyglass, shared by the servlet and reactive adapters. It registers
@@ -44,5 +45,20 @@ public class SpyglassCoreConfiguration {
             buildVersion = props == null ? null : props.getVersion();
         }
         return new SpyglassOpenApiCustomizer(applicationName, buildVersion);
+    }
+
+    /**
+     * Guard the adapters use to keep the explorer off a separate Actuator management port (see
+     * {@link ManagementPortGuard} for why the leak happens and how the port is detected). Stack-neutral, so
+     * both the servlet and reactive adapters share this one bean.
+     *
+     * @param environment the primary context environment (carries {@code local.server.port} and, when a
+     *                     separate management port is configured, {@code local.management.port})
+     *
+     * @return the management-port guard
+     */
+    @Bean
+    public ManagementPortGuard managementPortGuard(Environment environment) {
+        return new ManagementPortGuard(environment);
     }
 }

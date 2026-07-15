@@ -35,6 +35,13 @@ framework knows what to provide.
    document can be served on a separate port, the front-end spec URL is supplied through `config.js`
    rather than hard-coded.
 
+6. **Scope the explorer to the primary web server.** The redirects and asset handlers must apply only on
+   the primary application port, never on a separate admin/management port a host may run (e.g. Actuator
+   on its own port). The explorer can't function there — its spec isn't served on that port — so a shell
+   loading there is a dead, misleading UI. A host that legitimately serves its spec on the management
+   port still points the primary-port explorer at it through the `config.js` spec-URL seam (point 5);
+   that is independent of where the explorer UI is served.
+
 ## How the Spring adapters realize it
 
 - **Asset serving** registers a dedicated resource handler for each convention root (`/apidocs/**` and
@@ -52,6 +59,13 @@ framework knows what to provide.
 - **Redirects** — servlet: `WebMvcConfigurer#addViewControllers` with
   `addRedirectViewController(...).setStatusCode(FOUND)`; reactive: a `RouterFunction` bean (not a second
   `WebFluxConfigurer`, so it can't clobber a host's global `/**` CORS).
+- **Management-port scoping** — Boot's separate-port management context is a child of the primary
+  context and collects web beans *including ancestors*, so the explorer (and Boot's own default static
+  handler) would otherwise leak onto the admin port. Each adapter declines the explorer paths there at
+  request time — servlet: a `HandlerInterceptor`; reactive: a `WebFilter` — keyed on the request's
+  arrival port versus the version-neutral `local.management.port` (a shared `ManagementPortGuard` in
+  `spyglass-spring-core`). The primary port is untouched, and same-port / no-management-port setups are
+  no-ops.
 - **Entry point** — both adapters name it `SpyglassConfiguration`.
 - **Docs-serving quirk** — on reactive springdoc, `springdoc.use-management-port` may move the document
   to the management port; the spec URL is then set in `config.js`, not adapter code. The servlet
