@@ -15,7 +15,7 @@ springdoc starter (`provided`, so your service's versions win).
 <dependency>
   <groupId>org.plukh.spyglass</groupId>
   <artifactId>spyglass-spring-webmvc</artifactId>
-  <version>1.3.0</version>
+  <version>1.4.0</version>
 </dependency>
 ```
 
@@ -25,7 +25,7 @@ springdoc starter (`provided`, so your service's versions win).
 <dependency>
   <groupId>org.plukh.spyglass</groupId>
   <artifactId>spyglass-spring-webflux</artifactId>
-  <version>1.3.0</version>
+  <version>1.4.0</version>
 </dependency>
 ```
 
