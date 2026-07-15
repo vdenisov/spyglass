@@ -1,6 +1,7 @@
 package org.plukh.spyglass.spring.webflux;
 
 import org.plukh.spyglass.spring.core.ExplorerAssets;
+import org.plukh.spyglass.spring.core.ManagementPortGuard;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -10,11 +11,10 @@ import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import org.springframework.web.reactive.handler.SimpleUrlHandlerMapping;
 import org.springframework.web.reactive.resource.ResourceWebHandler;
+import org.springframework.web.server.WebFilter;
 
 import java.net.URI;
 import java.util.Map;
-
-import static org.springframework.web.reactive.function.server.RequestPredicates.GET;
 
 /**
  * Maps the friendly explorer paths to its static entry point, and serves the explorer's assets with a
@@ -42,6 +42,12 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
  * documentation page for a consuming service. <strong>Note:</strong> this takes over {@code GET /} — a
  * host that serves its own {@code index.html} at the root should not rely on {@code /} once Spyglass is
  * activated (reach the explorer via {@code /apidocs/} instead).
+ *
+ * <p>These mappings are meant for the primary web server only. When a host runs Actuator on a separate
+ * {@code management.server.port}, Boot's reactive management child context collects these beans (and the
+ * host's default resource handler) from the ancestor context, so the explorer would otherwise leak onto the
+ * admin port. {@link #spyglassManagementPortGuard} adds a {@link ManagementPortWebFilter} that {@code 404}s
+ * the explorer paths on that port; the primary port is unaffected.
  */
 @Configuration(proxyBeanMethods = false)
 public class SpyglassWebFluxConfig {
@@ -52,9 +58,11 @@ public class SpyglassWebFluxConfig {
         // the actual static entry point. A 302 Found, to agree with the servlet adapter's status.
         HandlerFunction<ServerResponse> toIndex = request ->
                 ServerResponse.status(HttpStatus.FOUND).location(URI.create(ExplorerAssets.ENTRY_POINT)).build();
-        return RouterFunctions.route(GET("/"), toIndex)
-                .andRoute(GET("/apidocs"), toIndex)
-                .andRoute(GET("/apidocs/"), toIndex);
+        RouterFunctions.Builder routes = RouterFunctions.route();
+        for (String path : ExplorerAssets.REDIRECT_PATHS) {
+            routes.GET(path, toIndex);
+        }
+        return routes.build();
     }
 
     @Bean
@@ -72,5 +80,13 @@ public class SpyglassWebFluxConfig {
                 ExplorerAssets.PATH_PATTERN, ExplorerAssetHandlers.handler(ExplorerAssets.location()),
                 ExplorerAssets.EXTENSION_PATH_PATTERN, ExplorerAssetHandlers.handler(ExplorerAssets.extensionLocation())),
                 ExplorerAssetHandlers.ASSET_MAPPING_ORDER);
+    }
+
+    @Bean
+    public WebFilter spyglassManagementPortGuard(ManagementPortGuard guard) {
+        // Keep the explorer off a separate management port (see ManagementPortWebFilter). Stays a plain
+        // WebFilter bean, not a WebFluxConfigurer, for the same CORS reason as the beans above; on the
+        // primary port it is a pure pass-through.
+        return new ManagementPortWebFilter(guard);
     }
 }

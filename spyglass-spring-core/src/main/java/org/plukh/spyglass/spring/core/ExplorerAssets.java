@@ -8,6 +8,7 @@ import org.springframework.util.DigestUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -45,8 +46,11 @@ import java.util.function.Function;
  */
 public final class ExplorerAssets {
 
+    /** Base URL path the explorer is served under; the single source for every explorer path below. */
+    public static final String BASE_PATH = "/apidocs";
+
     /** URL path pattern under which the explorer's assets are served. */
-    public static final String PATH_PATTERN = "/apidocs/**";
+    public static final String PATH_PATTERN = BASE_PATH + "/**";
 
     /** Classpath directory holding the committed assets (shipped by {@code spyglass-core}). */
     public static final String RESOURCE_BASE = "META-INF/resources/apidocs/";
@@ -55,7 +59,14 @@ public final class ExplorerAssets {
     public static final String CLASSPATH_LOCATION = "classpath:/" + RESOURCE_BASE;
 
     /** The explorer's static entry point — the target the friendly-path redirects resolve to. */
-    public static final String ENTRY_POINT = "/apidocs/index.html";
+    public static final String ENTRY_POINT = BASE_PATH + "/index.html";
+
+    /**
+     * The friendly paths that redirect to {@link #ENTRY_POINT}: the context root plus the two forms of
+     * {@link #BASE_PATH}. Both the adapters' redirect registrations and the management-port guard read this
+     * single list, so the guard cannot drift from the paths actually served.
+     */
+    public static final List<String> REDIRECT_PATHS = List.of("/", BASE_PATH, BASE_PATH + "/");
 
     /**
      * URL path pattern under which front-end extensions serve their assets. By convention every extension

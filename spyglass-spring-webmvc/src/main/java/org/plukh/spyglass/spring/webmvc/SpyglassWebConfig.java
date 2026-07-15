@@ -1,7 +1,9 @@
 package org.plukh.spyglass.spring.webmvc;
 
 import org.plukh.spyglass.spring.core.ExplorerAssets;
+import org.plukh.spyglass.spring.core.ManagementPortGuard;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
@@ -29,8 +31,21 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * documentation page for a consuming service. <strong>Note:</strong> this takes over {@code GET /} — a
  * host that serves its own {@code index.html} at the root should not rely on {@code /} once Spyglass is
  * activated (reach the explorer via {@code /apidocs/} instead).
+ *
+ * <p>These mappings are meant for the primary web server only. When a host runs Actuator on a separate
+ * {@code management.server.port}, Boot's management child context collects the host's
+ * {@code WebMvcConfigurer}s (this one <em>and</em> Boot's own default {@code /**} static handler) from the
+ * ancestor context, so the explorer would otherwise leak onto the admin port. {@link #addInterceptors} adds
+ * a {@link ManagementPortInterceptor} over the explorer paths to {@code 404} them on that port; the primary
+ * port is unaffected.
  */
 public class SpyglassWebConfig implements WebMvcConfigurer {
+
+    private final ManagementPortGuard guard;
+
+    public SpyglassWebConfig(ManagementPortGuard guard) {
+        this.guard = guard;
+    }
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
@@ -46,8 +61,20 @@ public class SpyglassWebConfig implements WebMvcConfigurer {
     public void addViewControllers(ViewControllerRegistry registry) {
         // Spring only resolves index.html for the context root, so map the friendly explorer paths to
         // the actual static entry point. The status is set explicitly so both adapters agree on 302.
-        registry.addRedirectViewController("/", ExplorerAssets.ENTRY_POINT).setStatusCode(HttpStatus.FOUND);
-        registry.addRedirectViewController("/apidocs", ExplorerAssets.ENTRY_POINT).setStatusCode(HttpStatus.FOUND);
-        registry.addRedirectViewController("/apidocs/", ExplorerAssets.ENTRY_POINT).setStatusCode(HttpStatus.FOUND);
+        for (String path : ExplorerAssets.REDIRECT_PATHS) {
+            registry.addRedirectViewController(path, ExplorerAssets.ENTRY_POINT).setStatusCode(HttpStatus.FOUND);
+        }
+    }
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        // Keep the explorer off a separate management port (see ManagementPortInterceptor). A mapped
+        // interceptor, not narrower registration: the host's default /** static handler is collected into
+        // the management context too and would still serve the assets there, so the surfaces must be
+        // declined at request time. Registering over the same paths ExplorerAssets defines (the redirect
+        // surfaces plus both asset roots) keeps this from drifting from what is actually served.
+        registry.addInterceptor(new ManagementPortInterceptor(guard))
+                .addPathPatterns(ExplorerAssets.REDIRECT_PATHS)
+                .addPathPatterns(ExplorerAssets.PATH_PATTERN, ExplorerAssets.EXTENSION_PATH_PATTERN);
     }
 }
