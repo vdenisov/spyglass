@@ -15,6 +15,12 @@ let tipEl = null
 let activeTarget = null
 let showTimer = null
 let listenersBound = false
+// Input-modality tracking so the focus trigger fires only for keyboard focus. A pointer (mouse click
+// or touch tap) that moves focus should not raise the tooltip: on desktop hover already covers it, and
+// on touch there is no mouseleave and the tapped control keeps focus, so a focus tooltip would pop on
+// tap and linger. `focusFromKeyboard` flips false on any pointerdown and true on any keydown (Tab, etc).
+let modalityBound = false
+let focusFromKeyboard = false
 // Last known pointer position, for `.cursor` tooltips that anchor to the mouse instead of the target
 // rect (used by the full-height resize divider, whose rect spans the whole page). pointerActive is
 // false when the tooltip was triggered by keyboard focus, so it falls back to rect positioning.
@@ -30,6 +36,14 @@ function ensureTip() {
   tipEl.setAttribute('role', 'tooltip')
   document.body.appendChild(tipEl)
   return tipEl
+}
+
+// Track what caused focus, once, in the capture phase so the flag is settled before focusin runs.
+function bindModalityListeners() {
+  if (modalityBound) return
+  modalityBound = true
+  document.addEventListener('pointerdown', () => { focusFromKeyboard = false }, true)
+  document.addEventListener('keydown', () => { focusFromKeyboard = true }, true)
 }
 
 function bindGlobalListeners() {
@@ -90,6 +104,12 @@ function hide() {
 function attach(el) {
   const enter = (e) => {
     if (!el.__tipText) return
+    // Suppress on touch. A tap fires a synthetic pointerenter (pointerType 'touch') and keeps focus with
+    // no leave, so both the hover and focus tooltips would otherwise linger until the next tap elsewhere.
+    // Genuine mouse/pen hover and keyboard focus are unaffected: hover shows on a non-touch pointerenter,
+    // and the focus tooltip shows only when focus arrived from the keyboard.
+    if (e && e.type === 'pointerenter' && e.pointerType === 'touch') return
+    if (e && e.type === 'focusin' && !focusFromKeyboard) return
     // Track the pointer for `.cursor` tooltips; a focus activation (no clientX) falls back to rect.
     if (el.__tipCursor) {
       if (e && typeof e.clientX === 'number') { pointerX = e.clientX; pointerY = e.clientY; pointerActive = true }
@@ -106,12 +126,15 @@ function attach(el) {
     pointerX = e.clientX; pointerY = e.clientY; pointerActive = true
     if (activeTarget === el) position(el, el.__tipText)
   }
+  bindModalityListeners()
   el.__tipEnter = enter
   el.__tipLeave = leave
   el.__tipMove = move
-  el.addEventListener('mouseenter', enter)
-  el.addEventListener('mouseleave', leave)
-  if (el.__tipCursor) el.addEventListener('mousemove', move)
+  // Pointer Events (not mouse*) so the enter handler can read pointerType and skip touch — the whole
+  // point of the touch suppression above.
+  el.addEventListener('pointerenter', enter)
+  el.addEventListener('pointerleave', leave)
+  if (el.__tipCursor) el.addEventListener('pointermove', move)
   // `.hover` opts out of the focus trigger (e.g. the sidebar op rows, where it's noisy during arrow
   // navigation and the opened panel already shows the summary). Those elements carry the hint for
   // assistive tech in their own accessible name instead.
@@ -122,9 +145,9 @@ function attach(el) {
 }
 
 function detach(el) {
-  el.removeEventListener('mouseenter', el.__tipEnter)
-  el.removeEventListener('mouseleave', el.__tipLeave)
-  el.removeEventListener('mousemove', el.__tipMove)
+  el.removeEventListener('pointerenter', el.__tipEnter)
+  el.removeEventListener('pointerleave', el.__tipLeave)
+  el.removeEventListener('pointermove', el.__tipMove)
   el.removeEventListener('focusin', el.__tipEnter)
   el.removeEventListener('focusout', el.__tipLeave)
 }
