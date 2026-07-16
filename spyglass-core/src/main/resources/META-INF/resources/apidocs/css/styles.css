@@ -307,8 +307,44 @@ input[readonly] { background: var(--bg-alt); color: var(--muted); cursor: defaul
 .op-id-copy:hover { background: var(--accent-weak); }
 /* The operation title is the panel's <h2>; keep it at body size (UA would blow it up). */
 .op-summary { font-size: 15px; font-weight: 600; margin: 10px 0 2px; }
-.op-desc { color: var(--muted); margin: 2px 0 8px; line-height: 1.45; }
+.op-desc-wrapper { margin: 2px 0 8px; }
+.op-desc { color: var(--muted); line-height: 1.45; }
 .op-desc p { margin: 4px 0; }
+/* Description clamping: 5-line height with fade-out when collapsed */
+.op-desc-clamped {
+  max-height: 7.25em; /* 5 lines at 1.45 line-height */
+  overflow: hidden;
+  position: relative;
+  cursor: pointer;
+}
+.op-desc-clamped::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3em;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  pointer-events: none;
+}
+/* Toggle button styling */
+.op-desc-toggle {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 0;
+  margin-top: 2px;
+  font-family: inherit;
+}
+.op-desc-toggle:hover {
+  text-decoration: underline;
+}
+.op-desc-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* Section headings under the operation title (Parameters, Request body, Responses, …). Promoted from
    <h4> to <h3> so the document heading scale is continuous (h1 brand → h2 op title → h3 sections); the
